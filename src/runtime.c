@@ -225,11 +225,16 @@ const tpm_evdigest_t *
 runtime_digest_efi_file(const tpm_algo_info_t *algo, const char *path)
 {
 	const tpm_evdigest_t *md;
+	char esp_path[PATH_MAX];
 
 	if (testcase_playback)
 		return testcase_playback_efi_digest(testcase_playback, path, algo);
 
-	md = digest_from_file(algo, path, 0);
+	/* FIXME: We may be better off having the caller tell us where to find the ESP.
+	 * The caller should know from the previous EFI BSA event for eg grub.efi
+	 * which partition is the ESP that was used. */
+	snprintf(esp_path, sizeof(esp_path), "/boot/efi%s", path);
+	md = digest_from_file(algo, esp_path, 0);
 	if (md && testcase_recording)
 		testcase_record_efi_digest(testcase_recording, path, md);
 
