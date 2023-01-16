@@ -30,8 +30,6 @@
 #include <tss2_rc.h>
 #include <tss2_mu.h>
 
-/* #include <openssl/pem.h> */
-
 #include "util.h"
 #include "runtime.h"
 #include "pcr.h"
@@ -677,7 +675,6 @@ esys_create(ESYS_CONTEXT *esys_context,
 
 static bool
 esys_unseal_authorized(ESYS_CONTEXT *esys_context,
-		const TPM2B_DIGEST *authorized_policy,
 		const tpm_pcr_bank_t *bank,
 		const TPMT_SIGNATURE *policy_signature,
 		const TPM2B_PUBLIC *pub_key,
@@ -1073,7 +1070,6 @@ pcr_authorized_policy_unseal_secret(const tpm_pcr_selection_t *pcr_selection,
 {
 	ESYS_CONTEXT *esys_context = tss_esys_context();
 	tpm_pcr_bank_t pcr_current_bank;
-	TPM2B_DIGEST *authorized_policy = NULL;
 	TPMT_SIGNATURE *policy_signature = NULL;
 	tpm_rsa_key_t *rsa_key = NULL;
 	TPM2B_PUBLIC *pub_key = NULL;
@@ -1083,9 +1079,6 @@ pcr_authorized_policy_unseal_secret(const tpm_pcr_selection_t *pcr_selection,
 	bool okay = false;
 
 	if (!read_public_key(rsakey_path, &pub_key))
-		goto cleanup;
-
-	if (!(authorized_policy = read_digest(authpolicy_path)))
 		goto cleanup;
 
 	if (!read_sealed_secret(input_path, &sealed_public, &sealed_private))
@@ -1102,7 +1095,7 @@ pcr_authorized_policy_unseal_secret(const tpm_pcr_selection_t *pcr_selection,
 
 	/* Now we've got all the ingredients we need. Go for it. */
 	okay = esys_unseal_authorized(esys_context,
-			authorized_policy, &pcr_current_bank, policy_signature, pub_key,
+			&pcr_current_bank, policy_signature, pub_key,
 			sealed_public, sealed_private, &unsealed);
 
 	if (unsealed) {
@@ -1116,8 +1109,6 @@ pcr_authorized_policy_unseal_secret(const tpm_pcr_selection_t *pcr_selection,
 cleanup:
 	if (unsealed)
 		free_secret(unsealed);
-	if (authorized_policy)
-		free(authorized_policy);
 	if (policy_signature)
 		free(policy_signature);
 	if (pub_key)
