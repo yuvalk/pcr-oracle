@@ -1,0 +1,7 @@
+
+ - Check whether the EFI BSA that got booted belong to the default boot entry
+   or whether they're from a different entry.
+   Warn if this is not the case.
+   (We should not override, because the sequence of TPM events may be totally
+   different for different boot entries).
+
