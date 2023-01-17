@@ -132,24 +132,15 @@ efi_variable_authority_get_record(const tpm_parsed_event_t *parsed, const char *
 	return result;
 }
 
-static const tpm_evdigest_t *
-__tpm_event_efi_variable_rehash(const tpm_event_t *ev, const tpm_parsed_event_t *parsed, tpm_event_log_rehash_ctx_t *ctx)
+static int
+__tpm_event_efi_variable_detect_hash_strategy(const tpm_event_t *ev, const tpm_parsed_event_t *parsed, const tpm_algo_info_t *algo)
 {
-	const tpm_algo_info_t *algo = ctx->algo;
-	const char *var_name;
-	unsigned int num_buffers_to_free = 0;
-	buffer_t *buffers_to_free[4];
-	buffer_t *file_data = NULL, *event_data = NULL, *data_to_hash = NULL;
 	const tpm_evdigest_t *md, *old_md;
-	int hash_strategy;
-
-	if (!(var_name = tpm_efi_variable_event_extract_full_varname(parsed)))
-		fatal("Unable to extract EFI variable name from EFI_VARIABLE event\n");
 
 	old_md = tpm_event_get_digest(ev, algo->openssl_name);
 	if (old_md == NULL) {
 		debug("Event does not provide a digest for algorithm %s\n", algo->openssl_name);
-		return NULL;
+		return -1;
 	}
 
 	/* UEFI implementations seem to differ in what they hash. Some Dell firmwares
@@ -159,17 +150,36 @@ __tpm_event_efi_variable_rehash(const tpm_event_t *ev, const tpm_parsed_event_t 
 	md = digest_compute(algo, ev->event_data, ev->event_size);
 	if (digest_equal(old_md, md)) {
 		debug("  Firmware hashed entire event data\n");
-		hash_strategy = HASH_STRATEGY_EVENT;
-	} else {
-		md = digest_compute(algo, parsed->efi_variable_event.data, parsed->efi_variable_event.len);
-		if (digest_equal(old_md, md)) {
-			debug("  Firmware hashed variable data\n");
-			hash_strategy = HASH_STRATEGY_DATA;
-		} else {
-			debug("  I'm lost.\n");
-			hash_strategy = HASH_STRATEGY_DATA; /* no idea what would be right */
-		}
+		return HASH_STRATEGY_EVENT;
 	}
+
+	md = digest_compute(algo, parsed->efi_variable_event.data, parsed->efi_variable_event.len);
+	if (digest_equal(old_md, md)) {
+		debug("  Firmware hashed variable data\n");
+		return HASH_STRATEGY_DATA;
+	}
+
+	debug("  I'm lost.\n");
+	return HASH_STRATEGY_DATA; /* no idea what would be right */
+}
+
+static const tpm_evdigest_t *
+__tpm_event_efi_variable_rehash(const tpm_event_t *ev, const tpm_parsed_event_t *parsed, tpm_event_log_rehash_ctx_t *ctx)
+{
+	const tpm_algo_info_t *algo = ctx->algo;
+	const char *var_name;
+	unsigned int num_buffers_to_free = 0;
+	buffer_t *buffers_to_free[4];
+	buffer_t *file_data = NULL, *event_data = NULL, *data_to_hash = NULL;
+	const tpm_evdigest_t *md = NULL;
+	int hash_strategy;
+
+	if (!(var_name = tpm_efi_variable_event_extract_full_varname(parsed)))
+		fatal("Unable to extract EFI variable name from EFI_VARIABLE event\n");
+
+	hash_strategy = __tpm_event_efi_variable_detect_hash_strategy(ev, parsed, algo);
+	if (hash_strategy < 0)
+		return NULL;
 
 	if (ev->event_type == TPM2_EFI_VARIABLE_AUTHORITY) {
 		/* For certificate related variables, EFI_VARIABLE_AUTHORITY events don't return the
@@ -184,7 +194,6 @@ __tpm_event_efi_variable_rehash(const tpm_event_t *ev, const tpm_parsed_event_t 
 		goto out;
 
 	buffers_to_free[num_buffers_to_free++] = file_data;
-
 
 	if (hash_strategy == HASH_STRATEGY_EVENT) {
 		event_data = __tpm_event_efi_variable_build_event(parsed,
