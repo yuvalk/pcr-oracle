@@ -32,6 +32,10 @@
 #include "util.h"
 
 
+/* Magic pointer returned by efi_variable_authority_get_record() when the boot service application
+ * to be verified cannot be located. */
+#define EFI_BSA_NOT_FOUND	((buffer_t *) 0x01)
+
 /*
  * Process EFI_VARIABLE events
  */
@@ -117,8 +121,8 @@ efi_variable_authority_get_record(const tpm_parsed_event_t *parsed, const char *
 	}
 
 	if (ctx->next_stage_img == NULL) {
-		error("Sorry, no image info for next stage boot loader\n");
-		return NULL;
+		infomsg("Unable to verify signature of a boot service; probably a driver residing in ROM.\n");
+		return EFI_BSA_NOT_FOUND;
 	}
 
 	signer = authenticode_get_signer(ctx->next_stage_img);
@@ -186,6 +190,18 @@ __tpm_event_efi_variable_rehash(const tpm_event_t *ev, const tpm_parsed_event_t 
 		 * entire DB, but only the record that was used in verifying the application's
 		 * authenticode signature. */
 		file_data = efi_variable_authority_get_record(parsed, var_name, ctx);
+		if (file_data == EFI_BSA_NOT_FOUND) {
+			/* The boot service we may be authenticating here might be an EFI
+			 * application residing in device ROM.
+			 * OVMF, for example, seems to do that, and the DevicePath it
+			 * uses for this is PNP0A03/PCI(2.0)/PCI(0)/OffsetRange(....)
+			 *
+			 * For the time being, just pretend these cannot be changed from
+			 * within the running system.
+			 */
+			md = tpm_event_get_digest(ev, algo->openssl_name);
+			goto out;
+		}
 	} else {
 		file_data = runtime_read_efi_variable(var_name);
 	}
