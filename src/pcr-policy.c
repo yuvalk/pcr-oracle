@@ -674,6 +674,93 @@ esys_create(ESYS_CONTEXT *esys_context,
 }
 
 static bool
+esys_seal_secret(ESYS_CONTEXT *esys_context, TPM2B_DIGEST *policy, const char *input_path, const char *output_path)
+{
+	TPM2B_SENSITIVE_DATA *secret = NULL;
+	TPM2B_PRIVATE *sealed_private = NULL;
+	TPM2B_PUBLIC *sealed_public = NULL;
+	ESYS_TR srk_handle = ESYS_TR_NONE;
+	bool ok = false;
+
+	if (!(secret = read_secret(input_path)))
+		goto cleanup;
+
+	/* On my machine, the TPM needs 20 seconds to derive the SRK in CreatePrimary */
+	infomsg("Sealing secret - this may take a moment\n");
+	if (!esys_create_primary(esys_context, &srk_handle))
+		goto cleanup;
+
+	if (!esys_create(esys_context, srk_handle, policy, secret, &sealed_private, &sealed_public))
+		goto cleanup;
+
+	ok = write_sealed_secret(output_path, sealed_public, sealed_private);
+	if (ok)
+		infomsg("Sealed secret written to %s\n", output_path?: "(standard output)");
+
+cleanup:
+	if (sealed_private)
+		free(sealed_private);
+	if (sealed_public)
+		free(sealed_public);
+	if (secret)
+		free_secret(secret);
+
+	esys_flush_context(esys_context, &srk_handle);
+	return ok;
+}
+
+static bool
+esys_unseal_pcr_policy(ESYS_CONTEXT *esys_context,
+		const tpm_pcr_bank_t *bank,
+		const TPM2B_PUBLIC *sealed_public, const TPM2B_PRIVATE *sealed_private,
+		TPM2B_SENSITIVE_DATA **sensitive_ret)
+{
+	TPML_PCR_SELECTION pcrs;
+	ESYS_TR session_handle = ESYS_TR_NONE;
+	ESYS_TR primary_handle = ESYS_TR_NONE;
+	ESYS_TR sealed_object_handle = ESYS_TR_NONE;
+	TPM2_RC rc;
+	bool okay = false;
+
+	pcr_bank_to_selection(&pcrs, bank);
+	if (!esys_create_primary(esys_context, &primary_handle))
+		goto cleanup;
+
+	rc = Esys_Load(esys_context, primary_handle,
+		ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE,
+		sealed_private, sealed_public,
+                &sealed_object_handle);
+	if (!__tss_check_error(rc, "Esys_Load failed"))
+		goto cleanup;
+
+	/* Create a policy session */
+	if (!esys_start_auth_session(esys_context, TPM2_SE_POLICY, &session_handle))
+		goto cleanup;
+
+	TPM2B_DIGEST empty_digest = { .size = 0 };
+	rc = Esys_PolicyPCR(esys_context, session_handle,
+			ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
+			&empty_digest, &pcrs);
+	if (!__tss_check_error(rc, "Esys_PolicyPCR failed"))
+		goto cleanup;
+
+	rc = Esys_Unseal(esys_context, sealed_object_handle,
+                session_handle, ESYS_TR_NONE, ESYS_TR_NONE,
+                (TPM2B_SENSITIVE_DATA **) sensitive_ret);
+	if (!__tss_check_error(rc, "Esys_Unseal failed"))
+		goto cleanup;
+
+	infomsg("Successfully unsealed... something.\n");
+	okay = true;
+
+cleanup:
+	esys_flush_context(esys_context, &session_handle);
+	esys_flush_context(esys_context, &primary_handle);
+	esys_flush_context(esys_context, &sealed_object_handle);
+	return okay;
+}
+
+static bool
 esys_unseal_authorized(ESYS_CONTEXT *esys_context,
 		const tpm_pcr_bank_t *bank,
 		const TPMT_SIGNATURE *policy_signature,
@@ -953,6 +1040,58 @@ cleanup:
 }
 
 bool
+pcr_seal_secret(const tpm_pcr_bank_t *bank, const char *input_path, const char *output_path)
+{
+	ESYS_CONTEXT *esys_context = tss_esys_context();
+	TPM2B_DIGEST *pcr_policy = NULL;
+	bool ok = false;
+
+	if (!(pcr_policy = __pcr_policy_make(esys_context, bank)))
+		return false;
+
+	ok = esys_seal_secret(esys_context, pcr_policy, input_path, output_path);
+
+	free(pcr_policy);
+	return ok;
+}
+
+bool
+pcr_unseal_secret(const tpm_pcr_selection_t *pcr_selection, const char *input_path, const char *output_path)
+{
+	ESYS_CONTEXT *esys_context = tss_esys_context();
+	tpm_pcr_bank_t pcr_current_bank;
+	TPM2B_PRIVATE *sealed_private = NULL;
+	TPM2B_PUBLIC *sealed_public = NULL;
+	TPM2B_SENSITIVE_DATA *unsealed = NULL;
+	bool okay = false;
+
+	if (!read_sealed_secret(input_path, &sealed_public, &sealed_private))
+		goto cleanup;
+
+	pcr_bank_initialize(&pcr_current_bank, pcr_selection->pcr_mask, pcr_selection->algo_info);
+	pcr_bank_init_from_current(&pcr_current_bank);
+
+	/* Now we've got all the ingredients we need. Go for it. */
+	okay = esys_unseal_pcr_policy(esys_context,
+			&pcr_current_bank,
+			sealed_public, sealed_private, &unsealed);
+
+	if (unsealed) {
+		buffer_t *bp = buffer_alloc_write(unsealed->size);
+
+		buffer_put(bp, unsealed->buffer, unsealed->size);
+		buffer_write_file(output_path, bp);
+		buffer_free(bp);
+	}
+
+cleanup:
+	if (unsealed)
+		free_secret(unsealed);
+	return okay;
+}
+
+
+bool
 pcr_authorized_policy_create(const tpm_pcr_selection_t *pcr_selection, const char *rsakey_path, const char *output_path)
 {
 	ESYS_CONTEXT *esys_context = tss_esys_context();
@@ -971,6 +1110,21 @@ pcr_authorized_policy_create(const tpm_pcr_selection_t *pcr_selection, const cha
 
 bool
 pcr_authorized_policy_seal_secret(const char *authpolicy_path, const char *input_path, const char *output_path)
+{
+	ESYS_CONTEXT *esys_context = tss_esys_context();
+	TPM2B_DIGEST *authorized_policy = NULL;
+	bool ok = false;
+
+	if (!(authorized_policy = read_digest(authpolicy_path)))
+		return false;
+
+	ok = esys_seal_secret(esys_context, authorized_policy, input_path, output_path);
+	free(authorized_policy);
+	return ok;
+}
+
+bool
+old_pcr_authorized_policy_seal_secret(const char *authpolicy_path, const char *input_path, const char *output_path)
 {
 	ESYS_CONTEXT *esys_context = tss_esys_context();
 	TPM2B_DIGEST *authorized_policy = NULL;

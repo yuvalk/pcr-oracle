@@ -67,6 +67,9 @@ extern bool		pcr_authorized_policy_unseal_secret(const tpm_pcr_selection_t *pcr_
 				const char *signed_policy_path,
 				const char *rsakey_path,
 				const char *input_path, const char *output_path);
-
+extern bool		pcr_seal_secret(const tpm_pcr_bank_t *bank,
+				const char *input_path, const char *output_path);
+extern bool		pcr_unseal_secret(const tpm_pcr_selection_t *pcr_selection,
+				const char *input_path, const char *output_path);
 
 #endif /* PCR_H */

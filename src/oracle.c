@@ -1124,8 +1124,8 @@ main(int argc, char **argv)
 				usage(1, "You need to specify the --public-key option when unsealing using an authorized policy\n");
 			if (opt_pcr_policy == NULL)
 				usage(1, "You need to specify the --pcr-policy option when unsealing using an authorized policy\n");
-			pcr_selection = get_pcr_selection_argument(argc, argv, opt_algo);
 		}
+		pcr_selection = get_pcr_selection_argument(argc, argv, opt_algo);
 		end_arguments(argc, argv);
 		break;
 
@@ -1180,7 +1180,8 @@ main(int argc, char **argv)
 			if (!pcr_authorized_policy_unseal_secret(pcr_selection, opt_authorized_policy, opt_pcr_policy, opt_rsa_public_key, opt_input, opt_output))
 				return 1;
 		} else {
-			fatal("Unseal using plain PCR policy not implemented\n");
+			if (!pcr_unseal_secret(pcr_selection, opt_input, opt_output))
+				return 1;
 		}
 
 		return 0;
@@ -1206,7 +1207,8 @@ main(int argc, char **argv)
 	} else
 	if (action == ACTION_SEAL) {
 		/* TBD - seal secret against a set of PCR values */
-		fatal("Sealing against a set of PCR values not yet implemented.\n");
+		if (!pcr_seal_secret(&pred->prediction, opt_input, opt_output))
+			return 1;
 	} else
 	if (action == ACTION_SIGN) {
 		if (!pcr_policy_sign(&pred->prediction, opt_rsa_private_key, opt_output))
