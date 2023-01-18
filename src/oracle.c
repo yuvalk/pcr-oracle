@@ -618,11 +618,12 @@ predictor_pre_scan_eventlog(struct predictor *pred, tpm_event_t **stop_event_p)
 	tpm_event_log_scan_ctx_destroy(&scan_ctx);
 }
 
-static void
+static bool
 predictor_update_eventlog(struct predictor *pred)
 {
 	tpm_event_log_rehash_ctx_t rehash_ctx;
 	tpm_event_t *ev, *stop_event = NULL;
+	bool okay = true;
 
 	predictor_pre_scan_eventlog(pred, &stop_event);
 
@@ -701,9 +702,13 @@ predictor_update_eventlog(struct predictor *pred)
 				new_digest = old_digest;
 			}
 
-			if (new_digest == NULL)
-				fatal("Cannot re-hash PCR for event type %s\n",
+			if (new_digest == NULL) {
+				error("Failed to re-hash event %u type %s\n",
+						ev->event_index,
 						tpm_event_type_to_string(ev->event_type));
+				new_digest = old_digest;
+				okay = false;
+			}
 
 			if (opt_debug && new_digest != old_digest) {
 				if (new_digest->size == old_digest->size
@@ -727,6 +732,7 @@ no_action:
 	}
 
 	tpm_event_log_rehash_ctx_destroy(&rehash_ctx);
+	return okay;
 }
 
 static const char *
@@ -740,13 +746,15 @@ get_next_arg(int *index_p, int argc, char **argv)
 	return argv[i];
 }
 
-static void
+static bool
 predictor_update_all(struct predictor *pred, int argc, char **argv)
 {
 	int i = 0, pcr_index = -1;
 
-	if (!strcmp(pred->initial_source, "eventlog"))
-		predictor_update_eventlog(pred);
+	if (!strcmp(pred->initial_source, "eventlog")) {
+		if (!predictor_update_eventlog(pred))
+			return false;
+	}
 
 	/* If the mask contains exactly one PCR, default pcr_index to that */
 	if (!(pred->pcr_mask & (pred->pcr_mask - 1))) {
@@ -788,6 +796,8 @@ predictor_update_all(struct predictor *pred, int argc, char **argv)
 			usage(1, NULL);
 		}
 	}
+
+	return true;
 }
 
 static unsigned int
@@ -1185,7 +1195,8 @@ main(int argc, char **argv)
 	if (opt_stop_event)
 		predictor_set_stop_event(pred, opt_stop_event, !opt_stop_before);
 
-	predictor_update_all(pred, argc - optind, argv + optind);
+	if (!predictor_update_all(pred, argc - optind, argv + optind))
+		return 1;
 
 	if (action == ACTION_PREDICT) {
 		if (opt_verify)

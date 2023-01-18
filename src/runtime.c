@@ -153,10 +153,12 @@ __system_read_efi_variable(const char *var_name)
 	} else {
 		/* Fall back to old sysfs entries with their 1K limitation */
 		snprintf(filename, sizeof(filename), "/sys/firmware/efi/vars/%s/data", var_name);
-		result = buffer_read_file(filename, RUNTIME_SHORT_READ_OKAY);
+		result = buffer_read_file(filename, RUNTIME_SHORT_READ_OKAY | RUNTIME_MISSING_FILE_OKAY);
 	}
 
-	if (result && testcase_recording)
+	if (result == NULL)
+		error("Unable to read EFI variable \"%s\"\n", var_name);
+	else if (testcase_recording)
 		testcase_record_efi_variable(testcase_recording, var_name, result);
 
 	return result;
