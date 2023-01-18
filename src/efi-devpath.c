@@ -155,6 +155,36 @@ __tpm_event_efi_device_path_item_file_path(const struct efi_device_path_item *it
 	return NULL;
 }
 
+static const char *
+__tpm_event_efi_device_path_item_pnp_name(const struct efi_device_path_item *item)
+{
+	static char name_path[32];
+
+	if (item->type == TPM2_EFI_DEVPATH_TYPE_ACPI_DEVICE) {
+		uint32_t pnp_hid, pnp_uid;
+		buffer_t buf;
+
+		buffer_init_read(&buf, item->data, item->len);
+
+		/* The ACPI device path component encodes PNP0a03 as 0x0a0x41d0 */
+		if (!buffer_get_u32le(&buf, &pnp_hid) || ((pnp_hid & 0xFFFF) != 0x41d0))
+			return NULL;
+
+		pnp_hid >>= 16;
+
+		if (!buffer_get_u32le(&buf, &pnp_uid))
+			return NULL;
+
+		if (pnp_uid)
+			snprintf(name_path, sizeof(name_path), "PNP%04X.%d", pnp_hid, pnp_uid);
+		else
+			snprintf(name_path, sizeof(name_path), "PNP%04X", pnp_hid);
+		return name_path;
+	}
+
+	return NULL;
+}
+
 static void
 __tpm_event_efi_device_path_item_print(const struct efi_device_path_item *item, tpm_event_bit_printer *print_fn)
 {
@@ -172,6 +202,11 @@ __tpm_event_efi_device_path_item_print(const struct efi_device_path_item *item, 
 
 	if ((string = __tpm_event_efi_device_path_item_file_path(item)) != NULL) {
 		print_fn("  file-path  \"%s\"\n", string);
+		return;
+	}
+
+	if ((string = __tpm_event_efi_device_path_item_pnp_name(item)) != NULL) {
+		print_fn("  ACPI       %s\n", string);
 		return;
 	}
 
