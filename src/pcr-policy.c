@@ -45,7 +45,8 @@ static const TPM2B_PUBLIC SRK_template = {
 		.nameAlg = TPM2_ALG_SHA256,
 		.objectAttributes = TPMA_OBJECT_RESTRICTED|TPMA_OBJECT_DECRYPT \
 			|TPMA_OBJECT_FIXEDTPM|TPMA_OBJECT_FIXEDPARENT \
-			|TPMA_OBJECT_SENSITIVEDATAORIGIN|TPMA_OBJECT_USERWITHAUTH,
+			|TPMA_OBJECT_SENSITIVEDATAORIGIN|TPMA_OBJECT_USERWITHAUTH \
+			|TPMA_OBJECT_NODA,
 		.parameters = {
 			.rsaDetail = {
 				.symmetric = {
@@ -55,11 +56,6 @@ static const TPM2B_PUBLIC SRK_template = {
 				},
 				.scheme = { TPM2_ALG_NULL },
 				.keyBits = 2048
-			}
-		},
-		.unique = {
-			.rsa = {
-				.size = 256
 			}
 		}
 	}
