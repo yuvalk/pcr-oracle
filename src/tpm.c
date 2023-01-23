@@ -66,7 +66,7 @@ tss_esys_context(void)
 		TSS2_RC rc;
 
 		rc = Esys_Initialize(&esys_ctx, NULL, NULL);
-		if (!__tss_check_error(rc, "Unable to initialize TSS2 ESAPI context"))
+		if (!tss_check_error(rc, "Unable to initialize TSS2 ESAPI context"))
 			fatal("Aborting.\n");
 
 		/* There's no way to query the library version programmatically, so

@@ -107,7 +107,7 @@ write_digest(const char *path, const TPM2B_DIGEST *d)
 	bp = buffer_alloc_write(2 * sizeof(*d));
 
 	rc = Tss2_MU_TPM2B_DIGEST_Marshal(d, bp->data, bp->size, &bp->wpos);
-	if (!__tss_check_error(rc, "Tss2_MU_TPM2B_DIGEST_Marshal failed"))
+	if (!tss_check_error(rc, "Tss2_MU_TPM2B_DIGEST_Marshal failed"))
 		goto cleanup;
 
 	ok = buffer_write_file(path, bp);
@@ -130,7 +130,7 @@ read_digest(const char *path)
 	d = calloc(1, sizeof(*d));
 
 	rc = Tss2_MU_TPM2B_DIGEST_Unmarshal(bp->data, bp->size, &bp->rpos, d);
-	if (!__tss_check_error(rc, "Tss2_MU_TPM2B_DIGEST_Unmarshal failed")) {
+	if (!tss_check_error(rc, "Tss2_MU_TPM2B_DIGEST_Unmarshal failed")) {
 		free(d);
 		d = NULL;
 	}
@@ -176,7 +176,7 @@ write_sealed_secret(const char *path, const TPM2B_PUBLIC *pub, const TPM2B_PRIVA
 	if (rc == TSS2_RC_SUCCESS)
 		rc = Tss2_MU_TPM2B_PRIVATE_Marshal(priv, bp->data, bp->size, &bp->wpos);
 
-	if (__tss_check_error(rc, "Tss2_MU_TPM2B_MAX_BUFFER_Marshal failed"))
+	if (tss_check_error(rc, "Tss2_MU_TPM2B_MAX_BUFFER_Marshal failed"))
 		ok = buffer_write_file(path, bp);
 
 	buffer_free(bp);
@@ -202,7 +202,7 @@ read_sealed_secret(const char *path, TPM2B_PUBLIC **pub_ret, TPM2B_PRIVATE **pri
 	if (rc == TSS2_RC_SUCCESS)
 		rc = Tss2_MU_TPM2B_PRIVATE_Unmarshal(bp->data, bp->size, &bp->rpos, priv);
 
-	if (__tss_check_error(rc, "Tss2_MU_TPM2B_MAX_BUFFER_Unmarshal failed")) {
+	if (tss_check_error(rc, "Tss2_MU_TPM2B_MAX_BUFFER_Unmarshal failed")) {
 		*priv_ret = priv;
 		*pub_ret = pub;
 		ok = true;
@@ -233,7 +233,7 @@ write_signature(const char *path, const TPMT_SIGNATURE *s)
 	bp = buffer_alloc_write(sizeof(*s) + 128);
 
 	rc = Tss2_MU_TPMT_SIGNATURE_Marshal(s, bp->data, bp->size, &bp->wpos);
-	if (!__tss_check_error(rc, "Tss2_MU_TPMT_SIGNATURE_Marshal failed"))
+	if (!tss_check_error(rc, "Tss2_MU_TPMT_SIGNATURE_Marshal failed"))
 		goto cleanup;
 
 	ok = runtime_write_file(path, bp);
@@ -256,7 +256,7 @@ read_signature(const char *path, TPMT_SIGNATURE **ret)
 
 	s = calloc(1, sizeof(*s));
 	rc = Tss2_MU_TPMT_SIGNATURE_Unmarshal(bp->data, bp->size, &bp->rpos, s);
-	if (__tss_check_error(rc, "Tss2_MU_TPMT_SIGNATURE_Unmarshal failed")) {
+	if (tss_check_error(rc, "Tss2_MU_TPMT_SIGNATURE_Unmarshal failed")) {
 		*ret = s;
 		ok = true;
 	} else {
@@ -277,7 +277,7 @@ write_public_key(const char *path, const TPM2B_PUBLIC *s)
 	bp = buffer_alloc_write(sizeof(*s) + 128);
 
 	rc = Tss2_MU_TPM2B_PUBLIC_Marshal(s, bp->data, bp->size, &bp->wpos);
-	if (!__tss_check_error(rc, "Tss2_MU_TPM2B_PUBLIC_Marshal failed"))
+	if (!tss_check_error(rc, "Tss2_MU_TPM2B_PUBLIC_Marshal failed"))
 		goto cleanup;
 
 	ok = runtime_write_file(path, bp);
@@ -300,7 +300,7 @@ read_public_key(const char *path, TPM2B_PUBLIC **ret)
 
 	pub_key = calloc(1, sizeof(*pub_key));
 	rc = Tss2_MU_TPM2B_PUBLIC_Unmarshal(bp->data, bp->size, &bp->rpos, pub_key);
-	if (__tss_check_error(rc, "Tss2_MU_TPM2B_PUBLIC_Unmarshal failed")) {
+	if (tss_check_error(rc, "Tss2_MU_TPM2B_PUBLIC_Unmarshal failed")) {
 		*ret = pub_key;
 		ok = true;
 	} else {
@@ -335,7 +335,7 @@ esys_start_auth_session(ESYS_CONTEXT *esys_context, TPM2_SE session_type, ESYS_T
 			session_handle_ret
 			);
 
-	return __tss_check_error(rc, "Esys_StartAuthSession failed");
+	return tss_check_error(rc, "Esys_StartAuthSession failed");
 }
 
 static void
@@ -347,7 +347,7 @@ esys_flush_context(ESYS_CONTEXT *esys_context, ESYS_TR *session_handle_p)
 		return;
 
 	rc = Esys_FlushContext(esys_context, *session_handle_p);
-	(void) __tss_check_error(rc, "Esys_FlushContext failed");
+	(void) tss_check_error(rc, "Esys_FlushContext failed");
         *session_handle_p = ESYS_TR_NONE;
 }
 
@@ -417,7 +417,7 @@ __pcr_bank_hash(ESYS_CONTEXT *esys_context, const tpm_pcr_bank_t *bank, TPM2B_DI
 			bank->algo_info->tcg_id,
 			&sequence_handle);
 
-	if (!__tss_check_error(rc, "Esys_HashSequenceStart failed"))
+	if (!tss_check_error(rc, "Esys_HashSequenceStart failed"))
 		return false;
 
 	for (i = 0; i < PCR_BANK_REGISTER_MAX; ++i) {
@@ -436,7 +436,7 @@ __pcr_bank_hash(ESYS_CONTEXT *esys_context, const tpm_pcr_bank_t *bank, TPM2B_DI
 				ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE,
 				&pcr_value);
 
-		if (!__tss_check_error(rc, "Esys_HashSequenceUpdate failed"))
+		if (!tss_check_error(rc, "Esys_HashSequenceUpdate failed"))
 			goto failed;
 
 		__pcr_selection_add(pcr_sel, bank->algo_info->tcg_id, i);
@@ -447,7 +447,7 @@ __pcr_bank_hash(ESYS_CONTEXT *esys_context, const tpm_pcr_bank_t *bank, TPM2B_DI
 			hash_ret, NULL);
 	sequence_handle = ESYS_TR_NONE;
 
-	if (!__tss_check_error(rc, "Esys_HashSequenceUpdate failed"))
+	if (!tss_check_error(rc, "Esys_HashSequenceUpdate failed"))
 		return false;
 
 	return true;
@@ -473,12 +473,12 @@ esys_policy_pcr(ESYS_CONTEXT *esys_context, TPML_PCR_SELECTION *pcrSel, TPM2B_DI
 
 	rc = Esys_PolicyPCR(esys_context, session_handle, ESYS_TR_NONE,
 			ESYS_TR_NONE, ESYS_TR_NONE, pcrDigest, pcrSel);
-	if (!__tss_check_error(rc, "Esys_PolicyPCR failed"))
+	if (!tss_check_error(rc, "Esys_PolicyPCR failed"))
 		goto cleanup;
 
 	rc = Esys_PolicyGetDigest(esys_context, session_handle, ESYS_TR_NONE,
 			ESYS_TR_NONE, ESYS_TR_NONE, result);
-	if (!__tss_check_error(rc, "Esys_PolicyGetDigest failed"))
+	if (!tss_check_error(rc, "Esys_PolicyGetDigest failed"))
 		goto cleanup;
 
 	ok = true;
@@ -527,11 +527,11 @@ esys_create_authorized_policy(ESYS_CONTEXT *esys_context,
 			ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, NULL,
 			pubKey, esys_tr_rh_owner,
 			&pub_key_handle);
-	if (!__tss_check_error(rc, "Esys_LoadExternal failed"))
+	if (!tss_check_error(rc, "Esys_LoadExternal failed"))
 		goto out;
 
 	rc = Esys_TR_GetName(esys_context, pub_key_handle, &public_key_name);
-	if (!__tss_check_error(rc, "Esys_TR_GetName failed"))
+	if (!tss_check_error(rc, "Esys_TR_GetName failed"))
 		goto out;
 
 	/* Create a trial session */
@@ -549,7 +549,7 @@ esys_create_authorized_policy(ESYS_CONTEXT *esys_context,
 			&policy_qualifier,
 			public_key_name,
 			&check_ticket);
-	if (!__tss_check_error(rc, "Esys_PolicyAuthorize failed"))
+	if (!tss_check_error(rc, "Esys_PolicyAuthorize failed"))
 		goto out;
 
 	/* Now get the digest and return it */
@@ -559,7 +559,7 @@ esys_create_authorized_policy(ESYS_CONTEXT *esys_context,
 			ESYS_TR_NONE,
 			ESYS_TR_NONE,
 			authorizedPolicy);
-	if (!__tss_check_error(rc, "Esys_PolicyGetDigest failed"))
+	if (!tss_check_error(rc, "Esys_PolicyGetDigest failed"))
 		goto out;
 
 	okay = true;
@@ -589,7 +589,7 @@ esys_create_primary(ESYS_CONTEXT *esys_context, ESYS_TR *handle_ret)
 			NULL, NULL,
 			NULL, NULL);
 
-	if (!__tss_check_error(rc, "Esys_CreatePrimary failed"))
+	if (!tss_check_error(rc, "Esys_CreatePrimary failed"))
 		return false;
 
 	debug("took %.3f sec to create SRK\n", timing_since(t0));
@@ -618,7 +618,7 @@ esys_create(ESYS_CONTEXT *esys_context,
 			&in_sensitive, &in_public,
 			NULL, &creation_pcr, out_private, out_public, NULL, NULL, NULL);
 
-	if (!__tss_check_error(rc, "Esys_Create failed"))
+	if (!tss_check_error(rc, "Esys_Create failed"))
 		return false;
 
 	return true;
@@ -681,7 +681,7 @@ esys_unseal_pcr_policy(ESYS_CONTEXT *esys_context,
 		ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE,
 		sealed_private, sealed_public,
                 &sealed_object_handle);
-	if (!__tss_check_error(rc, "Esys_Load failed"))
+	if (!tss_check_error(rc, "Esys_Load failed"))
 		goto cleanup;
 
 	/* Create a policy session */
@@ -692,13 +692,13 @@ esys_unseal_pcr_policy(ESYS_CONTEXT *esys_context,
 	rc = Esys_PolicyPCR(esys_context, session_handle,
 			ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
 			&empty_digest, &pcrs);
-	if (!__tss_check_error(rc, "Esys_PolicyPCR failed"))
+	if (!tss_check_error(rc, "Esys_PolicyPCR failed"))
 		goto cleanup;
 
 	rc = Esys_Unseal(esys_context, sealed_object_handle,
                 session_handle, ESYS_TR_NONE, ESYS_TR_NONE,
                 (TPM2B_SENSITIVE_DATA **) sensitive_ret);
-	if (!__tss_check_error(rc, "Esys_Unseal failed"))
+	if (!tss_check_error(rc, "Esys_Unseal failed"))
 		goto cleanup;
 
 	infomsg("Successfully unsealed... something.\n");
@@ -744,11 +744,11 @@ esys_unseal_authorized(ESYS_CONTEXT *esys_context,
 			ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, NULL,
 			pub_key, esys_tr_rh_owner,
 			&pub_key_handle);
-	if (!__tss_check_error(rc, "Esys_LoadExternal failed"))
+	if (!tss_check_error(rc, "Esys_LoadExternal failed"))
 		goto cleanup;
 
 	rc = Esys_TR_GetName(esys_context, pub_key_handle, &public_key_name);
-	if (!__tss_check_error(rc, "Esys_TR_GetName failed"))
+	if (!tss_check_error(rc, "Esys_TR_GetName failed"))
 		goto cleanup;
 
 	rc = Esys_Hash(esys_context,
@@ -756,7 +756,7 @@ esys_unseal_authorized(ESYS_CONTEXT *esys_context,
 			(const TPM2B_MAX_BUFFER *) pcr_policy,
 			TPM2_ALG_SHA256, esys_tr_rh_null,
 			&pcr_policy_hash, NULL);
-	if (!__tss_check_error(rc, "Esys_Hash failed"))
+	if (!tss_check_error(rc, "Esys_Hash failed"))
 		goto cleanup;
 
 	rc = Esys_VerifySignature(esys_context,
@@ -764,7 +764,7 @@ esys_unseal_authorized(ESYS_CONTEXT *esys_context,
 			ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
 			pcr_policy_hash, policy_signature,
 			&verification_ticket);
-	if (!__tss_check_error(rc, "Esys_VerifySignature failed"))
+	if (!tss_check_error(rc, "Esys_VerifySignature failed"))
 		goto cleanup;
 
 	if (!esys_create_primary(esys_context, &primary_handle))
@@ -774,7 +774,7 @@ esys_unseal_authorized(ESYS_CONTEXT *esys_context,
 		ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE,
 		sealed_private, sealed_public,
                 &sealed_object_handle);
-	if (!__tss_check_error(rc, "Esys_Load failed"))
+	if (!tss_check_error(rc, "Esys_Load failed"))
 		goto cleanup;
 
 
@@ -786,7 +786,7 @@ esys_unseal_authorized(ESYS_CONTEXT *esys_context,
 	rc = Esys_PolicyPCR(esys_context, session_handle,
 			ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
 			&empty_digest, &pcrs);
-	if (!__tss_check_error(rc, "Esys_PolicyPCR failed"))
+	if (!tss_check_error(rc, "Esys_PolicyPCR failed"))
 		goto cleanup;
 
 	TPM2B_NONCE policyRef = { .size = 0 };
@@ -794,13 +794,13 @@ esys_unseal_authorized(ESYS_CONTEXT *esys_context,
 			ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
 			pcr_policy, &policyRef,
 			public_key_name, verification_ticket);
-	if (!__tss_check_error(rc, "Esys_PolicyAuthorize failed"))
+	if (!tss_check_error(rc, "Esys_PolicyAuthorize failed"))
 		goto cleanup;
 
 	rc = Esys_Unseal(esys_context, sealed_object_handle,
                 session_handle, ESYS_TR_NONE, ESYS_TR_NONE,
                 (TPM2B_SENSITIVE_DATA **) sensitive_ret);
-	if (!__tss_check_error(rc, "Esys_Unseal failed"))
+	if (!tss_check_error(rc, "Esys_Unseal failed"))
 		goto cleanup;
 
 	infomsg("Successfully unsealed... something.\n");
@@ -922,7 +922,7 @@ pcr_read_into_bank(tpm_pcr_bank_t *bank)
 		rc = Esys_PCR_Read(esys_context,
 				ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
 				&pcr_selection, NULL, NULL, &pcr_values);
-		if (!__tss_check_error(rc, "Esys_PCR_Read failed"))
+		if (!tss_check_error(rc, "Esys_PCR_Read failed"))
 			goto cleanup;
 
 		for (index = 0, k = 0; index < PCR_BANK_REGISTER_MAX; ++index) {

@@ -32,7 +32,7 @@ extern ESYS_CONTEXT *	tss_esys_context(void);
 extern void		tss_print_error(int rc, const char *msg);
 
 static inline bool
-__tss_check_error(int rc, const char *msg)
+tss_check_error(int rc, const char *msg)
 {
 	if (rc == TSS2_RC_SUCCESS)
 		return true;
