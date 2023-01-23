@@ -31,6 +31,7 @@
 #include <tss2_rc.h>
 #include <tss2_mu.h>
 
+#include "oracle.h"
 #include "tpm.h"
 #include "util.h"
 #include "config.h"
@@ -82,4 +83,14 @@ tss_esys_context(void)
 		}
 	}
 	return esys_ctx;
+}
+
+bool
+tpm_selftest(bool fulltest)
+{
+	ESYS_CONTEXT *esys_ctx = tss_esys_context();
+	TSS2_RC rc;
+
+	rc = Esys_SelfTest(esys_ctx, ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, fulltest);
+	return tss_check_error(rc, "TPM self test failed");
 }

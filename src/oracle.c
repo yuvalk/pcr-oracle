@@ -41,7 +41,8 @@ enum {
 	ACTION_STORE_PUBLIC_KEY,
 	ACTION_SEAL,
 	ACTION_UNSEAL,
-	ACTION_SIGN
+	ACTION_SIGN,
+	ACTION_SELFTEST,
 };
 
 enum {
@@ -931,6 +932,7 @@ get_action_argument(int argc, char **argv)
 		{ "seal-secret",		ACTION_SEAL	},
 		{ "unseal-secret",		ACTION_UNSEAL	},
 		{ "sign",			ACTION_SIGN	},
+		{ "self-test",			ACTION_SELFTEST	},
 
 		{ NULL, 0 },
 	};
@@ -1136,6 +1138,16 @@ main(int argc, char **argv)
 		end_arguments(argc, argv);
 		break;
 
+	case ACTION_SELFTEST:
+		end_arguments(argc, argv);
+		break;
+	}
+
+	if (action == ACTION_SELFTEST) {
+		if (!tpm_selftest(true))
+			return 1;
+		infomsg("TPM self test succeeded.\n");
+		return 0;
 	}
 
 	if (action == ACTION_CREATE_AUTH_POLICY) {

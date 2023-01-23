@@ -213,6 +213,19 @@ To replay a test case, you can do this:
 .fi
 .P
 .\" ##################################################################
+.\" # Self-test
+.\" ##################################################################
+.SS TPM Self-test
+To perform a TPM self-test, simply execute \fBpcr-oracle\fP like this:
+.P
+.nf
+.in +2
+# pcr-oracle self-test
+.fi
+.P
+The reason this subcommand exists is that it allows an installer to
+set up full disk encryption without having to pull in all of tpm-tools.
+.\" ##################################################################
 .\" # OPTIONS
 .\" ##################################################################
 .SH OPTIONS
