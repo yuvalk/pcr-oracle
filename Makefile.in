@@ -21,6 +21,7 @@ ORACLE_SRCS	= oracle.c \
 		  efi-application.c \
 		  efi-gpt.c \
 		  shim.c \
+		  tpm.c \
 		  digest.c \
 		  runtime.c \
 		  authenticode.c \
