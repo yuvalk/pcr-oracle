@@ -44,6 +44,8 @@ static const TPM2B_PUBLIC SRK_template = {
 	.publicArea = {
 		.type = TPM2_ALG_RSA,
 		.nameAlg = TPM2_ALG_SHA256,
+		/* For reasons not clear to me, grub2 derives the SRK using the NODA attribute,
+		 * which means it is not subject to dictionary attack protections. */
 		.objectAttributes = TPMA_OBJECT_RESTRICTED|TPMA_OBJECT_DECRYPT \
 			|TPMA_OBJECT_FIXEDTPM|TPMA_OBJECT_FIXEDPARENT \
 			|TPMA_OBJECT_SENSITIVEDATAORIGIN|TPMA_OBJECT_USERWITHAUTH \
