@@ -53,9 +53,9 @@ output. If you want to process these values with a tool from the tpm2.0-tools
 package, you may prefer binary output, which you can select by invoking the
 tool with \fB--format binary\fP.
 .\" ##################################################################
-.\" # Authorized Policies
+.\" # PCR Policies
 .\" ##################################################################
-.SS Using Authorized Policies
+.SS PCR Policies
 The standard approach for sealing a secret against an expected system state
 using the TPM is to create what is called a "PCR Policy". This policy essentially
 requires a given set of PCRs to contain a specific set of values. This policy can
@@ -68,7 +68,38 @@ expected values at this point in time, unsealing will succeed. If they
 do not contain the expected values, unsealing will either fail, or
 produce gibberish.
 .P
-While this approach is sound and simple, it is not very flexible, unfortunately.
+In order to seal a secret againt a predicted set of PCRs, one would typically
+invoke \fBpcr-oracle\fP like this:
+.P
+.nf
+.in +2
+# pcr-oracle --from eventlog \\
+.br
+        --before --stop-event grub-command=tpm2_key_protector_init \\
+.br
+        --input secret --output sealed \\
+.br
+        seal-secret 0,2,4,7,9
+.fi
+.P
+Note that the size of the secret to be sealed must not exceed 128 bytes.
+.P
+The reverse operation looks like this:
+.P
+.nf
+.in +2
+# pcr-oracle --input sealed --output recovered \\
+        unseal-secret 0,2,4,7,9
+.fi
+.P
+This will instruct the TPM to unseal the given sealed data, computing the
+policy hash using the current values of the indicated PCRs.
+.P
+.\" ##################################################################
+.\" # Authorized Policies
+.\" ##################################################################
+.SS Using Authorized Policies
+While regular PCR policies are sound and simple, they are not very flexible, unfortunately.
 For example, transparently handling updates of the boot loader is rather
 difficult because we would first have to retrieve the secret before we're able
 to re-seal it to the future set of PCR values. This is where Authorized
@@ -76,7 +107,7 @@ Policies come in.
 .P
 TPM Authorized Policies provide a mechanism by which a secret is not sealed
 to a set of specific PCR values, but to a list of PCR indices, and a public
-RSA key. This combination (PCR indices and public key) are called an
+RSA key. This combination (PCR indices and public key) is called an
 Authorized Policy.
 .P
 The owner of the system can then use the secret RSA key to "authorize"
