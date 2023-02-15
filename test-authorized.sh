@@ -59,7 +59,6 @@ for attempt in first second; do
 
 	echo "$attempt attempt to unseal the secret"
 	call_oracle \
-		--auth authorized.policy \
 		--input sealed \
 		--output recovered \
 		--public-key policy-pubkey \
@@ -85,7 +84,6 @@ for attempt in first second; do
 	tpm2_pcrextend 12:sha256=21d2013e3081f1e455fdd5ba6230a8620c3cfc9a9c31981d857fe3891f79449e
 	rm -f recovered
 	call_oracle \
-		--auth authorized.policy \
 		--input sealed \
 		--output recovered \
 		--public-key policy-pubkey \

@@ -65,7 +65,6 @@ extern bool		pcr_authorized_policy_seal_secret(const bool tpm2key_fmt,
 				const char *authorized_policy, const char *input_path,
 				const char *output_path);
 extern bool		pcr_authorized_policy_unseal_secret(const tpm_pcr_selection_t *pcr_selection,
-				const char *authorized_policy,
 				const char *signed_policy_path,
 				const char *rsakey_path,
 				const char *input_path, const char *output_path);

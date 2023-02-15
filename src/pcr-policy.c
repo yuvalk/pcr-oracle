@@ -1217,7 +1217,6 @@ out:
  */
 bool
 pcr_authorized_policy_unseal_secret(const tpm_pcr_selection_t *pcr_selection,
-				const char *authpolicy_path,
 				const char *signed_policy_path,
 				const char *rsakey_path,
                                 const char *input_path, const char *output_path)
