@@ -751,8 +751,6 @@ esys_unseal_authorized(ESYS_CONTEXT *esys_context,
 		warning("%s: bad hash %x\n", __func__, policy_signature->signature.rsassa.hash);
 
 	pcr_bank_to_selection(&pcrs, bank);
-	if (!(pcr_policy = __pcr_policy_make(esys_context, bank)))
-		goto cleanup;
 
 	rc = Esys_LoadExternal(esys_context,
 			ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, NULL,
@@ -763,22 +761,6 @@ esys_unseal_authorized(ESYS_CONTEXT *esys_context,
 
 	rc = Esys_TR_GetName(esys_context, pub_key_handle, &public_key_name);
 	if (!tss_check_error(rc, "Esys_TR_GetName failed"))
-		goto cleanup;
-
-	rc = Esys_Hash(esys_context,
-			ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
-			(const TPM2B_MAX_BUFFER *) pcr_policy,
-			TPM2_ALG_SHA256, esys_tr_rh_null,
-			&pcr_policy_hash, NULL);
-	if (!tss_check_error(rc, "Esys_Hash failed"))
-		goto cleanup;
-
-	rc = Esys_VerifySignature(esys_context,
-			pub_key_handle,
-			ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
-			pcr_policy_hash, policy_signature,
-			&verification_ticket);
-	if (!tss_check_error(rc, "Esys_VerifySignature failed"))
 		goto cleanup;
 
 	if (!esys_create_primary(esys_context, &primary_handle))
@@ -801,6 +783,27 @@ esys_unseal_authorized(ESYS_CONTEXT *esys_context,
 			ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
 			&empty_digest, &pcrs);
 	if (!tss_check_error(rc, "Esys_PolicyPCR failed"))
+		goto cleanup;
+
+	rc = Esys_PolicyGetDigest(esys_context, session_handle, ESYS_TR_NONE,
+			ESYS_TR_NONE, ESYS_TR_NONE, &pcr_policy);
+	if (!__tss_check_error(rc, "Esys_PolicyGetDigest failed"))
+		goto cleanup;
+
+	rc = Esys_Hash(esys_context,
+			ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
+			(const TPM2B_MAX_BUFFER *) pcr_policy,
+			TPM2_ALG_SHA256, esys_tr_rh_null,
+			&pcr_policy_hash, NULL);
+	if (!__tss_check_error(rc, "Esys_Hash failed"))
+		goto cleanup;
+
+	rc = Esys_VerifySignature(esys_context,
+			pub_key_handle,
+			ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
+			pcr_policy_hash, policy_signature,
+			&verification_ticket);
+	if (!__tss_check_error(rc, "Esys_VerifySignature failed"))
 		goto cleanup;
 
 	TPM2B_NONCE policyRef = { .size = 0 };
