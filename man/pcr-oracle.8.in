@@ -49,7 +49,7 @@ rehash it. The same holds for EFI Boot Service Application events for grub2 or
 shim; or for EFI GPT events.
 .P
 In the example above, \fBpcr-oracle\fP will print the predicted values to standard
-output. If you want to process these values with a tool from the tpm2.0-tools 
+output. If you want to process these values with a tool from the tpm2.0-tools
 package, you may prefer binary output, which you can select by invoking the
 tool with \fB--format binary\fP.
 .\" ##################################################################
@@ -168,7 +168,7 @@ portion of the RSA key, needs to be stored somewhere in a location that
 is accessible at the time we need to unlock the LUKS key.
 .P
 The second command seals the secret against this policy. The clear text
-is stored in \fPfile-containing-secret\fP, the sealed cipher text is 
+is stored in \fPfile-containing-secret\fP, the sealed cipher text is
 stored in \fBsealed-secret\fP. Note that the TPM is limited in the maximum
 amount of secret data it can seal; it's probably safe to assume a limit of
 128 bytes.
@@ -200,6 +200,19 @@ This command will read the RSA private key from the PEM file,
 and write the public key as a \fBTPM2B_PUBLIC\fP object to
 the indicated output file \fBpolicy-pubkey\fP.
 .\" ##################################################################
+.\" # New key format
+.\" ##################################################################
+.SS Using the TPM2.0 policy file format
+By default, \fBpcr-oracle\fP writes the policy and key files (which are
+supposed to be consumed by the boot loader) in a raw format that can be
+loaded more or less directly into the TPM.
+.P
+The upstream grub community has adopted a more versatile (and complex) file
+format, which combines key and policies into a single, ASN.1 encoded file.
+The behavior can be selected by invoking the \fBsign\fP and \dBseal-secret\fP
+operations with the \fB--key-format=tpm2.0\fP option. For examples, please see
+the \fBEXAMPLES\fP section below.
+.\" ##################################################################
 .\" # Test Cases
 .\" ##################################################################
 .SS Creating and Replaying Test Cases
@@ -229,7 +242,7 @@ directory tree at \fB/tmp/pcr-oracle.test\fP:
 .fi
 .P
 If you want to submit your test case, please use \fBtar\fP to archive
-the test case and create an issue in the github issue tracker at 
+the test case and create an issue in the github issue tracker at
 \fBgithub.com/okirch/pcr-oracle\fP.
 .P
 To replay a test case, you can do this:
@@ -278,7 +291,7 @@ set to the current values of the system's TPM.
 .BI --algorithm " hash-alg
 By default, \fBpcr-oracle\fP will operate on PCR registers that use  the
 sha256 hash algorithm. Using this option, you can select a different hash
-algorithm, assuming the chip supports it. 
+algorithm, assuming the chip supports it.
 For backward compatibility with version 1 of the specification, all TPMv2
 chips also support sha1, but using that is not recommended.
 .TP
@@ -289,7 +302,7 @@ select different output formats.
 .IP
 A format of \fBbinary\fP will write the predicted values as a binary octet
 stream, all values concatenated together. This format can be used with
-tools like 
+tools like
 .BR tpm2_policypcr (1). A format of \fBtpm2-tools\fP will use a reporting
 format this is similar to the one that the tpm2-tools produce as output.
 The default behavior is selected by format \fBplain\fP.
@@ -346,10 +359,64 @@ for example).
 By default, the tool will read the current TPM event log. It is possible
 to process an event log generated on a different system by specifying it
 with this option.
+.TP
+.BI --key-format " fmt
+By default, the tool writes all data that is supposed to be read by the boot
+loader in a raw format that requires little or no conversion before
+being loaded into the TPM. This format can be requested explicitly by
+using \fB--key-format=raw\fP.
+.IP
+Alternatively, it can read and write a format called \fBtpm2.0\fP which
+is becoming the preferred format used by grub.
+.\" ##################################################################
+.\" # NOTES
+.\" ##################################################################
 .SH NOTES
 \fBpcr-oracle\fP also supports an \fBunseal\fP action for unsealing
 secrets. This is mostly for testing purposes and may change at any
 time.
+.\" ##################################################################
+.\" # EXAMPLES
+.\" ##################################################################
+.SH EXAMPLES
+The following will seal a secret against PCR 0,2,4,7, and write the result
+to \fBsealed-pcr.tpm\fP using the new tpm2.0 format:
+.P
+.nf
+.in +2
+# pcr-oracle \\
+	--key-format=tpm2.0 \\
+	--input secret \\
+	--output sealed-pcr.tpm \\
+	seal-secret 0,2,4,7
+.fi
+.P
+To seal a secret for an authorized policy:
+.P
+.nf
+.in +2
+# pcr-oracle \\
+	--key-format=tpm2.0 \\
+	--auth authorized.policy \\
+	--input secret \\
+	--output sealed-auth.tpm \\
+	seal-secret
+.fi
+.P
+To sign the policy against PCR 0,2,4,7 for sealed-auth.tpm:
+.P
+.nf
+.in +2
+# pcr-oracle \\
+	--key-format=tpm2.0 \\
+	--private-key policy-key.pem \\
+	--input sealed-auth.tpm \\
+	--output sealed-auth-signed.tpm \\
+	sign 0,2,4,7
+.fi
+.\" ##################################################################
+.\" # SEE ALSO
+.\" ##################################################################
 .SH SEE ALSO
 .BR tpm2_policypcr (1),
 .BR tpm2_policyauthorize (1),
