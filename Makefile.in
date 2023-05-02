@@ -22,6 +22,7 @@ ORACLE_SRCS	= oracle.c \
 		  efi-gpt.c \
 		  shim.c \
 		  tpm.c \
+		  tpm2key.c \
 		  digest.c \
 		  runtime.c \
 		  authenticode.c \

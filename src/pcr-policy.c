@@ -38,6 +38,7 @@
 #include "bufparser.h"
 #include "tpm.h"
 #include "config.h"
+#include "tpm2key.h"
 
 static const TPM2B_PUBLIC SRK_template = {
 	.size = sizeof(TPMT_PUBLIC),
@@ -623,12 +624,15 @@ esys_create(ESYS_CONTEXT *esys_context,
 }
 
 static bool
-esys_seal_secret(ESYS_CONTEXT *esys_context, TPM2B_DIGEST *policy, const char *input_path, const char *output_path)
+esys_seal_secret(const bool tpm2key_fmt, ESYS_CONTEXT *esys_context,
+		 TPM2B_DIGEST *policy, const TPML_PCR_SELECTION *pcr_sel,
+		 const char *input_path, const char *output_path)
 {
 	TPM2B_SENSITIVE_DATA *secret = NULL;
 	TPM2B_PRIVATE *sealed_private = NULL;
 	TPM2B_PUBLIC *sealed_public = NULL;
 	ESYS_TR srk_handle = ESYS_TR_NONE;
+	TSSPRIVKEY *tpm2key = NULL;
 	bool ok = false;
 
 	if (!(secret = read_secret(input_path)))
@@ -642,7 +646,17 @@ esys_seal_secret(ESYS_CONTEXT *esys_context, TPM2B_DIGEST *policy, const char *i
 	if (!esys_create(esys_context, srk_handle, policy, secret, &sealed_private, &sealed_public))
 		goto cleanup;
 
-	ok = write_sealed_secret(output_path, sealed_public, sealed_private);
+	if (tpm2key_fmt) {
+		if (!tpm2key_basekey(&tpm2key, TPM2_RH_OWNER, sealed_public, sealed_private))
+			goto cleanup;
+
+		if (pcr_sel && !tpm2key_add_policy_policypcr(tpm2key, pcr_sel))
+			goto cleanup;
+
+		ok = tpm2key_write_file(output_path, tpm2key);
+	} else
+		ok = write_sealed_secret(output_path, sealed_public, sealed_private);
+
 	if (ok)
 		infomsg("Sealed secret written to %s\n", output_path?: "(standard output)");
 
@@ -653,6 +667,8 @@ cleanup:
 		free(sealed_public);
 	if (secret)
 		free_secret(secret);
+	if (tpm2key)
+		TSSPRIVKEY_free(tpm2key);
 
 	esys_flush_context(esys_context, &srk_handle);
 	return ok;
@@ -989,16 +1005,22 @@ cleanup:
 }
 
 bool
-pcr_seal_secret(const tpm_pcr_bank_t *bank, const char *input_path, const char *output_path)
+pcr_seal_secret(const bool tpm2key_fmt, const tpm_pcr_bank_t *bank,
+		const char *input_path, const char *output_path)
 {
 	ESYS_CONTEXT *esys_context = tss_esys_context();
 	TPM2B_DIGEST *pcr_policy = NULL;
+	TPML_PCR_SELECTION pcr_sel;
 	bool ok = false;
 
 	if (!(pcr_policy = __pcr_policy_make(esys_context, bank)))
 		return false;
 
-	ok = esys_seal_secret(esys_context, pcr_policy, input_path, output_path);
+	if (!pcr_bank_to_selection(&pcr_sel, bank))
+		return false;
+
+	ok = esys_seal_secret(tpm2key_fmt, esys_context, pcr_policy, &pcr_sel,
+			      input_path, output_path);
 
 	free(pcr_policy);
 	return ok;
@@ -1058,7 +1080,8 @@ pcr_authorized_policy_create(const tpm_pcr_selection_t *pcr_selection, const cha
 }
 
 bool
-pcr_authorized_policy_seal_secret(const char *authpolicy_path, const char *input_path, const char *output_path)
+pcr_authorized_policy_seal_secret(const bool tpm2key_fmt, const char *authpolicy_path,
+				  const char *input_path, const char *output_path)
 {
 	ESYS_CONTEXT *esys_context = tss_esys_context();
 	TPM2B_DIGEST *authorized_policy = NULL;
@@ -1067,7 +1090,8 @@ pcr_authorized_policy_seal_secret(const char *authpolicy_path, const char *input
 	if (!(authorized_policy = read_digest(authpolicy_path)))
 		return false;
 
-	ok = esys_seal_secret(esys_context, authorized_policy, input_path, output_path);
+	ok = esys_seal_secret(tpm2key_fmt, esys_context, authorized_policy, NULL,
+			      input_path, output_path);
 	free(authorized_policy);
 	return ok;
 }
@@ -1123,17 +1147,31 @@ cleanup:
  * expected PCR values, and signing the resulting digest.
  */
 bool
-pcr_policy_sign(const tpm_pcr_bank_t *bank, const char *rsakey_path, const char *output_path)
+pcr_policy_sign(const bool tpm2key_fmt, const tpm_pcr_bank_t *bank, const char *rsakey_path,
+		const char *input_path, const char *output_path)
 {
 	ESYS_CONTEXT *esys_context = tss_esys_context();
 	TPM2B_DIGEST *pcr_policy = NULL;
 	tpm_rsa_key_t *rsa_key = NULL;
 	TPM2B_PUBLIC *pub_key = NULL;
 	TPMT_SIGNATURE *signed_policy = NULL;
+	TSSPRIVKEY *tpm2key = NULL;
+	TPML_PCR_SELECTION pcr_sel;
 	bool okay = false;
 
 	if (!(rsa_key = tpm_rsa_key_read_private(rsakey_path)))
 		goto out;
+
+	if (tpm2key_fmt) {
+		if (!(pub_key = tpm_rsa_key_to_tss2(rsa_key)))
+			goto out;
+
+		if (!tpm2key_read_file(input_path, &tpm2key))
+			goto out;
+
+		if (!pcr_bank_to_selection(&pcr_sel, bank))
+			goto out;
+	}
 
 	if (!(pcr_policy = __pcr_policy_make(esys_context, bank)))
 		goto out;
@@ -1141,8 +1179,19 @@ pcr_policy_sign(const tpm_pcr_bank_t *bank, const char *rsakey_path, const char 
 	if (!__pcr_policy_sign(rsa_key, pcr_policy, &signed_policy))
 		goto out;
 
-	if (!write_signature(output_path, signed_policy))
-		goto out;
+	if (tpm2key) {
+		/* Prepend the signed policy */
+		if (!tpm2key_add_authpolicy_policyauthorize(tpm2key, "default",
+							    &pcr_sel, pub_key,
+							    signed_policy, false))
+			goto out;
+
+		if (!tpm2key_write_file(output_path, tpm2key))
+			goto out;
+	} else {
+		if (!write_signature(output_path, signed_policy))
+			goto out;
+	}
 	infomsg("Signed PCR policy written to %s\n", output_path?: "(standard output)");
 	okay = true;
 
@@ -1155,6 +1204,8 @@ out:
 		free(pub_key);
 	if (rsa_key)
 		tpm_rsa_key_free(rsa_key);
+	if (tpm2key)
+		TSSPRIVKEY_free(tpm2key);
 
 	return okay;
 }
@@ -1221,4 +1272,3 @@ cleanup:
 
 	return okay;
 }
-

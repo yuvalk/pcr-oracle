@@ -91,6 +91,7 @@ enum {
 	OPT_OUTPUT,
 	OPT_AUTHORIZED_POLICY,
 	OPT_PCR_POLICY,
+	OPT_KEY_FORMAT,
 };
 
 static struct option options[] = {
@@ -117,6 +118,7 @@ static struct option options[] = {
 	{ "output",		required_argument,	0,	OPT_OUTPUT },
 	{ "authorized-policy",	required_argument,	0,	OPT_AUTHORIZED_POLICY },
 	{ "pcr-policy",		required_argument,	0,	OPT_PCR_POLICY },
+	{ "key-format",		required_argument,	0,	OPT_KEY_FORMAT },
 
 	{ NULL }
 };
@@ -997,6 +999,8 @@ main(int argc, char **argv)
 	char *opt_rsa_private_key = NULL;
 	char *opt_rsa_public_key = NULL;
 	bool opt_rsa_generate = false;
+	char *opt_key_format = NULL;
+	bool tpm2key_fmt = false;
 	int c, exit_code = 0;
 
 	while ((c = getopt_long(argc, argv, "dhA:CF:LSZ", options, NULL)) != EOF) {
@@ -1070,6 +1074,9 @@ main(int argc, char **argv)
 		case OPT_PCR_POLICY:
 			opt_pcr_policy = optarg;
 			break;
+		case OPT_KEY_FORMAT:
+			opt_key_format = optarg;
+			break;
 		case 'h':
 			usage(0, NULL);
 		default:
@@ -1087,6 +1094,14 @@ main(int argc, char **argv)
 
 	if (opt_create_testcase)
 		runtime_record_testcase(testcase_alloc(opt_create_testcase));
+
+	if (!opt_key_format || !strcasecmp(opt_key_format, "raw"))
+		tpm2key_fmt = false;
+	else
+	if (!strcasecmp(opt_key_format, "tpm2.0"))
+		tpm2key_fmt = true;
+	else
+		fatal("Unsupported key format \"%s\"\n", opt_key_format);
 
 	/* Validate options */
 	switch (action) {
@@ -1134,6 +1149,10 @@ main(int argc, char **argv)
 	case ACTION_SIGN:
 		if (opt_rsa_private_key == NULL)
 			usage(1, "You need to specify the --private-key option when signing a policy\n");
+		if (tpm2key_fmt) {
+			if (opt_input == NULL)
+				usage(1, "You need to specify the --input option when signing a policy into a TPM 2.0 Key file\n");
+		}
 		pcr_selection = get_pcr_selection_argument(argc, argv, opt_algo);
 		end_arguments(argc, argv);
 		break;
@@ -1180,7 +1199,7 @@ main(int argc, char **argv)
 	/* When sealing a secret against an authorized policy, there's no need to
 	 * mess around with PCR values. That's the beauty of it... */
 	if (action == ACTION_SEAL && opt_authorized_policy) {
-		if (!pcr_authorized_policy_seal_secret(opt_authorized_policy, opt_input, opt_output))
+		if (!pcr_authorized_policy_seal_secret(tpm2key_fmt, opt_authorized_policy, opt_input, opt_output))
 			return 1;
 
 		return 0;
@@ -1219,11 +1238,11 @@ main(int argc, char **argv)
 	} else
 	if (action == ACTION_SEAL) {
 		/* TBD - seal secret against a set of PCR values */
-		if (!pcr_seal_secret(&pred->prediction, opt_input, opt_output))
+		if (!pcr_seal_secret(tpm2key_fmt, &pred->prediction, opt_input, opt_output))
 			return 1;
 	} else
 	if (action == ACTION_SIGN) {
-		if (!pcr_policy_sign(&pred->prediction, opt_rsa_private_key, opt_output))
+		if (!pcr_policy_sign(tpm2key_fmt, &pred->prediction, opt_rsa_private_key, opt_input, opt_output))
 			return 1;
 	}
 
