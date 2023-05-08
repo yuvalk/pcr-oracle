@@ -1272,3 +1272,264 @@ cleanup:
 
 	return okay;
 }
+
+static inline TPMI_ALG_HASH
+__TPMT_SIGNATURE_get_hash_alg (TPMT_SIGNATURE *sig)
+{
+  switch (sig->sigAlg)
+    {
+    case TPM2_ALG_RSASSA:
+      return sig->signature.rsassa.hash;
+    case TPM2_ALG_RSAPSS:
+      return sig->signature.rsapss.hash;
+    case TPM2_ALG_ECDSA:
+      return sig->signature.ecdsa.hash;
+    case TPM2_ALG_ECDAA:
+      return sig->signature.ecdaa.hash;
+    case TPM2_ALG_SM2:
+      return sig->signature.sm2.hash;
+    case TPM2_ALG_ECSCHNORR:
+      return sig->signature.ecschnorr.hash;
+    case TPM2_ALG_HMAC:
+      return sig->signature.hmac.hashAlg;
+    default:
+      break;
+    }
+
+  return TPM2_ALG_NULL;
+}
+
+static bool
+__pcr_policy_tpm2_policyauthorize(ESYS_CONTEXT *esys_context, ESYS_TR session_handle, buffer_t *bp)
+{
+	TPM2B_PUBLIC pub_key = { 0 };
+	TPM2B_DIGEST policy_ref = { 0 };
+	TPMT_SIGNATURE policy_signature = { 0 };
+	TPMI_ALG_HASH sig_hash_alg;
+	TPM2B_DIGEST *pcr_policy = NULL;
+	TPM2B_DIGEST *pcr_policy_hash = NULL;
+	TPMT_TK_VERIFIED *verification_ticket = NULL;
+	ESYS_TR pub_key_handle = ESYS_TR_NONE;
+	TPM2B_NAME *public_key_name = NULL;
+	TPM2_RC rc;
+	bool okay = false;
+
+	rc = Tss2_MU_TPM2B_PUBLIC_Unmarshal(bp->data, bp->size, &bp->rpos, &pub_key);
+	if (rc != TSS2_RC_SUCCESS)
+		return false;
+
+	rc = Tss2_MU_TPM2B_DIGEST_Unmarshal(bp->data, bp->size, &bp->rpos, &policy_ref);
+	if (rc != TSS2_RC_SUCCESS)
+		return false;
+
+	rc = Tss2_MU_TPMT_SIGNATURE_Unmarshal(bp->data, bp->size, &bp->rpos, &policy_signature);
+	if (rc != TSS2_RC_SUCCESS)
+		return false;
+
+	sig_hash_alg = __TPMT_SIGNATURE_get_hash_alg(&policy_signature);
+
+	rc = Esys_PolicyGetDigest(esys_context, session_handle, ESYS_TR_NONE,
+			ESYS_TR_NONE, ESYS_TR_NONE, &pcr_policy);
+	if (!tss_check_error(rc, "Esys_PolicyGetDigest failed"))
+		goto cleanup;
+
+	rc = Esys_Hash(esys_context,
+			ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
+			(const TPM2B_MAX_BUFFER *) pcr_policy,
+			sig_hash_alg, esys_tr_rh_null,
+			&pcr_policy_hash, NULL);
+	if (!tss_check_error(rc, "Esys_Hash failed"))
+		goto cleanup;
+
+	rc = Esys_LoadExternal(esys_context,
+			ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, NULL,
+			&pub_key, esys_tr_rh_owner,
+			&pub_key_handle);
+	if (!tss_check_error(rc, "Esys_LoadExternal failed"))
+		goto cleanup;
+
+	rc = Esys_TR_GetName(esys_context, pub_key_handle, &public_key_name);
+	if (!tss_check_error(rc, "Esys_TR_GetName failed"))
+		goto cleanup;
+
+	rc = Esys_VerifySignature(esys_context,
+			pub_key_handle,
+			ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
+			pcr_policy_hash, &policy_signature,
+			&verification_ticket);
+	if (!tss_check_error(rc, "Esys_VerifySignature failed"))
+		goto cleanup;
+
+	rc = Esys_PolicyAuthorize(esys_context, session_handle,
+			ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
+			pcr_policy, &policy_ref,
+			public_key_name, verification_ticket);
+	if (!tss_check_error(rc, "Esys_PolicyAuthorize failed"))
+		goto cleanup;
+
+	okay = true;
+cleanup:
+	if (pcr_policy)
+		free(pcr_policy);
+	if (pcr_policy_hash)
+		free(pcr_policy_hash);
+	if (public_key_name)
+		free(public_key_name);
+	esys_flush_context(esys_context, &pub_key_handle);
+
+	return okay;
+}
+
+static bool
+__pcr_policy_tpm2_policypcr(ESYS_CONTEXT *esys_context, ESYS_TR session_handle, buffer_t *bp)
+{
+	TPM2B_DIGEST digest = { 0 };
+	TPML_PCR_SELECTION pcrs = { 0 };
+	TPM2_RC rc;
+
+	rc = Tss2_MU_TPM2B_DIGEST_Unmarshal(bp->data, bp->size, &bp->rpos, &digest);
+	if (rc != TSS2_RC_SUCCESS)
+		return false;
+
+	rc = Tss2_MU_TPML_PCR_SELECTION_Unmarshal(bp->data, bp->size, &bp->rpos, &pcrs);
+	if (rc != TSS2_RC_SUCCESS)
+		return false;
+
+	rc = Esys_PolicyPCR(esys_context, session_handle,
+			ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
+			&digest, &pcrs);
+	if (!tss_check_error(rc, "Esys_PolicyPCR failed"))
+		return false;
+
+	return true;
+}
+
+static bool
+__pcr_policy_unseal_policy_seq(ESYS_CONTEXT *esys_context,
+			ESYS_TR sealed_object_handle,
+			STACK_OF(TSSOPTPOLICY) *policy_seq,
+			TPM2B_SENSITIVE_DATA **sensitive_ret)
+{
+	ESYS_TR session_handle = ESYS_TR_NONE;
+	TSSOPTPOLICY *policy;
+	int i, num_commands;
+	TPM2_RC rc;
+	bool okay = false;
+
+	/* Create a policy session */
+	if (!esys_start_auth_session(esys_context, TPM2_SE_POLICY, &session_handle))
+		goto cleanup;
+
+	num_commands = sk_TSSOPTPOLICY_num(policy_seq);
+	for (i = 0; i < num_commands; i++) {
+		int code;
+		buffer_t buf;
+
+		policy = sk_TSSOPTPOLICY_value(policy_seq, i);
+		code = ASN1_INTEGER_get(policy->CommandCode);
+		buffer_init_read(&buf, policy->CommandPolicy->data, policy->CommandPolicy->length);
+		switch (code) {
+		case TPM2_CC_PolicyPCR:
+			if (!__pcr_policy_tpm2_policypcr(esys_context, session_handle, &buf))
+				goto cleanup;
+			break;
+		case TPM2_CC_PolicyAuthorize:
+			if (!__pcr_policy_tpm2_policyauthorize(esys_context, session_handle, &buf))
+				goto cleanup;
+			break;
+		default:
+			error("Unsupported TPM command: %d\n", code);
+			goto cleanup;
+		}
+	}
+
+	rc = Esys_Unseal(esys_context, sealed_object_handle,
+                session_handle, ESYS_TR_NONE, ESYS_TR_NONE,
+                sensitive_ret);
+	if (!tss_check_error(rc, "Esys_Unseal failed"))
+		goto cleanup;
+
+	infomsg("Successfully unsealed... something.\n");
+
+	okay = true;
+cleanup:
+	esys_flush_context(esys_context, &session_handle);
+
+	return okay;
+}
+
+/* Unseal the key in TPM 2.0 Key File format */
+bool
+pcr_policy_unseal_tpm2key(const char *input_path, const char *output_path)
+{
+	ESYS_CONTEXT *esys_context = tss_esys_context();
+	TSSPRIVKEY *tpm2key = NULL;
+	buffer_t buf;
+	TPM2B_PUBLIC pub = { 0 };
+	TPM2B_PRIVATE priv = { 0 };
+	ESYS_TR primary_handle = ESYS_TR_NONE;
+	ESYS_TR sealed_object_handle = ESYS_TR_NONE;
+	TPM2B_SENSITIVE_DATA *unsealed = NULL;
+	TPM2_RC rc;
+	bool okay = false;
+
+	if (!tpm2key_read_file(input_path, &tpm2key))
+		return false;
+
+	buffer_init_read(&buf, tpm2key->pubkey->data, tpm2key->pubkey->length);
+	rc = Tss2_MU_TPM2B_PUBLIC_Unmarshal(buf.data, buf.size, &buf.rpos, &pub);
+	if (rc != TSS2_RC_SUCCESS)
+		goto cleanup;
+
+	buffer_init_read(&buf, tpm2key->privkey->data, tpm2key->privkey->length);
+	rc = Tss2_MU_TPM2B_PRIVATE_Unmarshal(buf.data, buf.size, &buf.rpos, &priv);
+	if (rc != TSS2_RC_SUCCESS)
+		goto cleanup;
+
+	if (!esys_create_primary(esys_context, &primary_handle))
+		goto cleanup;
+
+	rc = Esys_Load(esys_context, primary_handle,
+		ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE,
+		&priv, &pub, &sealed_object_handle);
+	if (!tss_check_error(rc, "Esys_Load failed"))
+		goto cleanup;
+
+	if (tpm2key->authPolicy) {
+		TSSAUTHPOLICY *authpolicy;
+		STACK_OF(TSSOPTPOLICY) *policy_seq;
+		int i, num_policies;
+
+		num_policies = sk_TSSAUTHPOLICY_num(tpm2key->authPolicy);
+		for (i = 0; i < num_policies; i++) {
+			authpolicy = sk_TSSAUTHPOLICY_value(tpm2key->authPolicy, i);
+			policy_seq = authpolicy->policy;
+			okay = __pcr_policy_unseal_policy_seq(esys_context,
+					sealed_object_handle, policy_seq, &unsealed);
+			if (okay)
+				break;
+		}
+	} else if (tpm2key->policy) {
+		okay = __pcr_policy_unseal_policy_seq(esys_context, sealed_object_handle,
+				 tpm2key->policy, &unsealed);
+	}
+
+	if (unsealed) {
+		buffer_t *bp = buffer_alloc_write(unsealed->size);
+
+		buffer_put(bp, unsealed->buffer, unsealed->size);
+		buffer_write_file(output_path, bp);
+		buffer_free(bp);
+	}
+
+cleanup:
+	if (tpm2key)
+		TSSPRIVKEY_free(tpm2key);
+	if (unsealed)
+		free_secret(unsealed);
+
+	esys_flush_context(esys_context, &primary_handle);
+	esys_flush_context(esys_context, &sealed_object_handle);
+
+	return okay;
+}

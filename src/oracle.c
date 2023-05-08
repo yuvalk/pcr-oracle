@@ -1136,6 +1136,11 @@ main(int argc, char **argv)
 		break;
 
 	case ACTION_UNSEAL:
+		if (tpm2key_fmt) {
+			end_arguments(argc, argv);
+			break;
+		}
+
 		if (opt_authorized_policy) {
 			if (opt_rsa_public_key == NULL)
 				usage(1, "You need to specify the --public-key option when unsealing using an authorized policy\n");
@@ -1206,6 +1211,11 @@ main(int argc, char **argv)
 	}
 
 	if (action == ACTION_UNSEAL) {
+		if (tpm2key_fmt) {
+			/* input is the sealed secret, output is the cleartext */
+			if (!pcr_policy_unseal_tpm2key (opt_input, opt_output))
+				return 1;
+		} else
 		if (opt_authorized_policy) {
 			/* input is the sealed secret, output is the cleartext */
 			if (!pcr_authorized_policy_unseal_secret(pcr_selection, opt_authorized_policy, opt_pcr_policy, opt_rsa_public_key, opt_input, opt_output))

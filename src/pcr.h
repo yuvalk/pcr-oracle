@@ -73,5 +73,7 @@ extern bool		pcr_seal_secret(const bool tpm2key_fmt, const tpm_pcr_bank_t *bank,
 				const char *input_path, const char *output_path);
 extern bool		pcr_unseal_secret(const tpm_pcr_selection_t *pcr_selection,
 				const char *input_path, const char *output_path);
+extern bool		pcr_policy_unseal_tpm2key(const char *input_path,
+				const char *output_path);
 
 #endif /* PCR_H */
