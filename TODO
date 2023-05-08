@@ -5,3 +5,34 @@
    (We should not override, because the sequence of TPM events may be totally
    different for different boot entries).
 
+ - Ideas on centrally managed PCR authorization
+
+   In a managed environment, we can do without a local RSA key on disk
+   (for authorized policy signing), and use a central authority instead
+   that has a list of "blessed" versions of UEFI Boot Services that
+   can be used (ie shim loader, grub, ...).
+
+   Centrally managed pcr authorization should perform the following:
+
+   * client sends the PCR eventlog plus the version numbers for grub
+     and shim that are being used
+   * server computes the PCR values, and when it encounters an
+     authenticode hash for a binary, it recomputes it using its
+     "authoritative" copy from the vendor's RPM
+
+   Alternatively:
+   * client sends the Authenticode hashes for the binaries that it
+     finds on the local disk. server validates these against a
+     DB of "known good" values
+
+   In both cases, perform PCR prediction as usual, and send back the
+   signed policy.
+
+   The server can perform PCR Policy computation without a TPM:
+
+   * Create new digest using selected hash algo
+   * update: old digest (with should be 000....00 for us)
+   * update: command code TPM2_CC_PolicyPCR = 0x0000017f
+   * marshal TPML_PCR_SELECTION and update the hash with this data
+   * update: pcrDigest (ie the hashed values of the PCRs we want to cover)
+   * finalize the hash and retrieve digest
