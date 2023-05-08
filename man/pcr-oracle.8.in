@@ -209,9 +209,9 @@ loaded more or less directly into the TPM.
 .P
 The upstream grub community has adopted a more versatile (and complex) file
 format, which combines key and policies into a single, ASN.1 encoded file.
-The behavior can be selected by invoking the \fBsign\fP and \dBseal-secret\fP
-operations with the \fB--key-format=tpm2.0\fP option. For examples, please see
-the \fBEXAMPLES\fP section below.
+The behavior can be selected by invoking the \fBsign\fP, \fBseal-secret\fP
+and \fBunseal-secret\fP operations with the \fB--key-format=tpm2.0\fP
+option. For examples, please see the \fBEXAMPLES\fP section below.
 .\" ##################################################################
 .\" # Test Cases
 .\" ##################################################################
