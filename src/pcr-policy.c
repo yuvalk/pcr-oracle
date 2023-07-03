@@ -1151,7 +1151,7 @@ cleanup:
  */
 bool
 pcr_policy_sign(const bool tpm2key_fmt, const tpm_pcr_bank_t *bank, const char *rsakey_path,
-		const char *input_path, const char *output_path)
+		const char *input_path, const char *output_path, const char *policy_name)
 {
 	ESYS_CONTEXT *esys_context = tss_esys_context();
 	TPM2B_DIGEST *pcr_policy = NULL;
@@ -1183,8 +1183,11 @@ pcr_policy_sign(const bool tpm2key_fmt, const tpm_pcr_bank_t *bank, const char *
 		goto out;
 
 	if (tpm2key) {
+		if (!policy_name)
+			policy_name = "default";
+
 		/* Prepend the signed policy */
-		if (!tpm2key_add_authpolicy_policyauthorize(tpm2key, "default",
+		if (!tpm2key_add_authpolicy_policyauthorize(tpm2key, policy_name,
 							    &pcr_sel, pub_key,
 							    signed_policy, false))
 			goto out;

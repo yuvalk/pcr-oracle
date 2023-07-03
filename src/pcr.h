@@ -60,7 +60,7 @@ extern bool		pcr_authorized_policy_create(const tpm_pcr_selection_t *pcr_selecti
 extern bool		pcr_store_public_key(const char *rsakey_path, const char *output_path);
 extern bool		pcr_policy_sign(const bool tpm2key_fmt, const tpm_pcr_bank_t *bank,
 				const char *rsakey_path, const char *input_path,
-				const char *output_path);
+				const char *output_path, const char *policy_name);
 extern bool		pcr_authorized_policy_seal_secret(const bool tpm2key_fmt,
 				const char *authorized_policy, const char *input_path,
 				const char *output_path);

@@ -82,6 +82,7 @@ for attempt in first second; do
 	echo "Sign the set of PCRs we want to authorize"
 	call_oracle \
 		--key-format tpm2.0 \
+		--policy-name "authorized-policy-test" \
 		--private-key policy-key.pem \
 		--from current \
 		--input sealed \

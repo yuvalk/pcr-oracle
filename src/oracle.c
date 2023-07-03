@@ -92,6 +92,7 @@ enum {
 	OPT_AUTHORIZED_POLICY,
 	OPT_PCR_POLICY,
 	OPT_KEY_FORMAT,
+	OPT_POLICY_NAME,
 };
 
 static struct option options[] = {
@@ -119,6 +120,7 @@ static struct option options[] = {
 	{ "authorized-policy",	required_argument,	0,	OPT_AUTHORIZED_POLICY },
 	{ "pcr-policy",		required_argument,	0,	OPT_PCR_POLICY },
 	{ "key-format",		required_argument,	0,	OPT_KEY_FORMAT },
+	{ "policy-name",	required_argument,	0,	OPT_POLICY_NAME },
 
 	{ NULL }
 };
@@ -1000,6 +1002,7 @@ main(int argc, char **argv)
 	char *opt_rsa_public_key = NULL;
 	bool opt_rsa_generate = false;
 	char *opt_key_format = NULL;
+	char *opt_policy_name = NULL;
 	bool tpm2key_fmt = false;
 	int c, exit_code = 0;
 
@@ -1076,6 +1079,9 @@ main(int argc, char **argv)
 			break;
 		case OPT_KEY_FORMAT:
 			opt_key_format = optarg;
+			break;
+		case OPT_POLICY_NAME:
+			opt_policy_name = optarg;
 			break;
 		case 'h':
 			usage(0, NULL);
@@ -1250,7 +1256,7 @@ main(int argc, char **argv)
 			return 1;
 	} else
 	if (action == ACTION_SIGN) {
-		if (!pcr_policy_sign(tpm2key_fmt, &pred->prediction, opt_rsa_private_key, opt_input, opt_output))
+		if (!pcr_policy_sign(tpm2key_fmt, &pred->prediction, opt_rsa_private_key, opt_input, opt_output, opt_policy_name))
 			return 1;
 	}
 

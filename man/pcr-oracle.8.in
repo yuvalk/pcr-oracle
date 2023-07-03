@@ -368,6 +368,13 @@ using \fB--key-format=raw\fP.
 .IP
 Alternatively, it can read and write a format called \fBtpm2.0\fP which
 is becoming the preferred format used by grub.
+.TP
+.BI --policy-name " name
+For the tpm2.0 format, there is an extra field, Name, for the authorized
+polices. This option is only valid when sigining the sealded key in
+\fBtpm2.0\fP format. The \fBName\fP is optional and only used for display
+purposes. If the user doesn't specify a name, the default name is 'default'.
+
 .\" ##################################################################
 .\" # NOTES
 .\" ##################################################################
@@ -409,6 +416,7 @@ To sign the policy against PCR 0,2,4,7 for sealed-auth.tpm:
 .in +2
 # pcr-oracle \\
 	--key-format=tpm2.0 \\
+	--policy-name "sealing test" \\
 	--private-key policy-key.pem \\
 	--input sealed-auth.tpm \\
 	--output sealed-auth-signed.tpm \\
