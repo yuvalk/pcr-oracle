@@ -206,8 +206,15 @@ __tpm_event_efi_variable_rehash(const tpm_event_t *ev, const tpm_parsed_event_t 
 		file_data = runtime_read_efi_variable(var_name);
 	}
 
-	if (file_data == NULL)
+	if (file_data == NULL) {
+		if (parsed->efi_variable_event.len == 0) {
+			/* The content of the variable doesn't exist during the measurement
+			 * and is also not available at runtime. Let's skip this event.
+			 */
+			md = tpm_event_get_digest(ev, algo->openssl_name);
+		}
 		goto out;
+	}
 
 	buffers_to_free[num_buffers_to_free++] = file_data;
 
