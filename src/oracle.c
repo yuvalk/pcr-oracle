@@ -399,6 +399,7 @@ static bool
 __check_stop_event(tpm_event_t *ev, int type, const char *value, tpm_event_log_scan_ctx_t *ctx)
 {
 	const char *grub_arg = NULL;
+	const char *grub_cmd = NULL;
 	tpm_parsed_event_t *parsed;
 
 	switch (type) {
@@ -419,7 +420,11 @@ __check_stop_event(tpm_event_t *ev, int type, const char *value, tpm_event_log_s
 		if (!(grub_arg = parsed->grub_command.argv[0]))
 			return false;
 
-		return !strcmp(grub_arg, value);
+		grub_cmd = grub_arg;
+		while (grub_cmd != NULL && !isalpha(*grub_cmd))
+			grub_cmd++;
+
+		return !strcmp(grub_cmd, value);
 
 	case STOP_EVENT_GRUB_FILE:
 		if (ev->pcr_index != 9
