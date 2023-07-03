@@ -53,4 +53,8 @@ function uc_subst {
 if [ $(basename $0) = "subst" ]; then
 	__uc_scriptdir="$(dirname $0)"
 	uc_subst "$@"
+elif [ "$__uc_rechecking" = true ]; then
+	# The user is running ./configure which is possibly changing
+	# some settings. We have to rebuild the sed script
+	rm -f "$__uc_scriptdir/sedscript"
 fi

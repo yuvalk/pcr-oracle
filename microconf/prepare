@@ -8,6 +8,9 @@ PROGNAME=${0#**/}
 uc_sourcedir=$(dirname $0)
 __uc_scriptdir="$uc_sourcedir/microconf"
 
+# We want the subst part to regenerate the subst scripts
+__uc_rechecking=true
+
 opt_debug=false
 
 ##################################################################
