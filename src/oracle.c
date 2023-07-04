@@ -989,7 +989,7 @@ main(int argc, char **argv)
 {
 	struct predictor *pred;
 	int action = ACTION_NONE;
-	tpm_pcr_selection_t *pcr_selection;
+	tpm_pcr_selection_t *pcr_selection = NULL;
 	char *opt_from = NULL;
 	char *opt_algo = NULL;
 	char *opt_output_format = NULL;
@@ -1174,6 +1174,9 @@ main(int argc, char **argv)
 	case ACTION_SELFTEST:
 		end_arguments(argc, argv);
 		break;
+
+	default:
+		fatal("Action %u not implemented", action);
 	}
 
 	if (action == ACTION_SELFTEST) {
@@ -1239,6 +1242,10 @@ main(int argc, char **argv)
 
 	if (opt_stop_event && (!opt_from || strcmp(opt_from, "eventlog")))
 		usage(1, "--stop-event only makes sense when using event log");
+
+	/* If pcr_selection is NULL, the programmer must have been sloppy. */
+	if (pcr_selection == NULL)
+		fatal("BUG: action %u should have parsed a PCR selection argument", action);
 
 	pred = predictor_new(pcr_selection, opt_from, opt_eventlog_path,
 			opt_output_format);
