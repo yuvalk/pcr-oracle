@@ -453,7 +453,7 @@ canon_path(const char *path)
 		++path;
 
 	save_path = strdup(path);
-	for (s = save_path; *comp; ) {
+	for (s = save_path; *s; ) {
 		comp = s;
 		while (*s) {
 			if (*s == '/') {
