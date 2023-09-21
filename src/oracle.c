@@ -43,6 +43,7 @@ enum {
 	ACTION_UNSEAL,
 	ACTION_SIGN,
 	ACTION_SELFTEST,
+	ACTION_RSATEST,
 };
 
 enum {
@@ -944,6 +945,7 @@ get_action_argument(int argc, char **argv)
 		{ "unseal-secret",		ACTION_UNSEAL	},
 		{ "sign",			ACTION_SIGN	},
 		{ "self-test",			ACTION_SELFTEST	},
+		{ "rsa-test",			ACTION_RSATEST	},
 
 		{ NULL, 0 },
 	};
@@ -1195,8 +1197,22 @@ main(int argc, char **argv)
 		end_arguments(argc, argv);
 		break;
 
+	case ACTION_RSATEST:
+		end_arguments(argc, argv);
+		break;
+
 	default:
 		fatal("Action %u not implemented", action);
+	}
+
+	if (action == ACTION_RSATEST) {
+		if (tpm_rsa_bits_test(rsa_bits)) {
+			infomsg("RSA %u supported\n", rsa_bits);
+			return 0;
+		} else {
+			infomsg("RSA %u unsupported\n", rsa_bits);
+			return 1;
+		}
 	}
 
 	set_srk_rsa_bits (rsa_bits);
