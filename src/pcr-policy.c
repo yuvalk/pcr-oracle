@@ -40,7 +40,7 @@
 #include "config.h"
 #include "tpm2key.h"
 
-static const TPM2B_PUBLIC SRK_template = {
+static TPM2B_PUBLIC SRK_template = {
 	.size = sizeof(TPMT_PUBLIC),
 	.publicArea = {
 		.type = TPM2_ALG_RSA,
@@ -84,6 +84,11 @@ static const TPM2B_PUBLIC seal_public_template = {
             }
         };
 
+void
+set_srk_rsa_bits (const unsigned int rsa_bits)
+{
+	SRK_template.publicArea.parameters.rsaDetail.keyBits = rsa_bits;
+}
 
 static inline const tpm_evdigest_t *
 tpm_evdigest_from_TPM2B_DIGEST(const TPM2B_DIGEST *td, tpm_evdigest_t *result, const tpm_algo_info_t *algo_info)
