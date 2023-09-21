@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <iconv.h>
+#include <assert.h>
 
 #include "util.h"
 #include "digest.h"
@@ -186,6 +187,42 @@ print_octet_string(const unsigned char *data, unsigned int len)
 
 	return buffer;
 
+}
+
+const char *
+print_base64_value(const unsigned char *data, unsigned int len)
+{
+	static char buffer[2048];
+	static const char table[64] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+	unsigned int b64_len, i;
+	char *b;
+
+	b64_len = 4 * ((len + 2) / 3) + 1;
+	assert(b64_len < 2048);
+
+	b = buffer;
+	for (i = 0; (i + 2) < len; i += 3) {
+		*b++ = table[(data[i] >> 2) & 63];
+		*b++ = table[((data[i] & 3) << 4 | data[i + 1] >> 4) & 63];
+		*b++ = table[((data[i + 1] & 15) << 2 | data[i + 2] >> 6) & 63];
+		*b++ = table[data[i + 2] & 63];
+	}
+
+	if ((i + 2) == len) {
+		*b++ = table[(data[i] >> 2) & 63];
+		*b++ = table[((data[i] & 3) << 4 | data[i + 1] >> 4) & 63];
+		*b++ = table[((data[i + 1] & 15) << 2) & 63];
+		*b++ = '=';
+	} else if ((i + 1) == len) {
+		*b++ = table[(data[i] >> 2) & 63];
+		*b++ = table[((data[i] & 3) << 4) & 63];
+		*b++ = '=';
+		*b++ = '=';
+	}
+
+	*b = 0;
+
+	return buffer;
 }
 
 const tpm_evdigest_t *
