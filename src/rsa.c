@@ -32,6 +32,7 @@
 
 #include "util.h"
 #include "rsa.h"
+#include "digest.h"
 
 struct tpm_rsa_key {
 	bool		is_private;
@@ -324,3 +325,34 @@ tpm_rsa_key_to_tss2(const tpm_rsa_key_t *key)
 	return rsa_pubkey_alloc(n, e, key->path);
 }
 
+const tpm_evdigest_t *
+tpm_rsa_key_public_digest(tpm_rsa_key_t *pubkey) {
+	unsigned int der_size;
+	unsigned char *der, *bder = NULL;
+	const tpm_algo_info_t *algo;
+	const tpm_evdigest_t *digest = NULL;
+
+	/* Convert the public key into DER format */
+	der_size = i2d_PublicKey(pubkey->pkey, NULL);
+	if (der_size < 0) {
+		error("%s: cannot convert public key into DER format", pubkey->path);
+		return NULL;
+	}
+
+	der = bder = malloc(der_size);
+	der_size = i2d_PublicKey(pubkey->pkey, &der);
+	if (der_size < 0) {
+		error("%s: cannot convert public key into DER format", pubkey->path);
+		goto out;
+	}
+
+	/* Hash the public key */
+	algo = digest_by_name("sha256");
+	digest = digest_compute(algo, bder, der_size);
+
+ out:
+	if (bder)
+		free(bder);
+
+	return digest;
+}

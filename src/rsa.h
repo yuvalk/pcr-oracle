@@ -37,4 +37,5 @@ extern int		tpm_rsa_sign(const tpm_rsa_key_t *,
 
 extern TPM2B_PUBLIC *	tpm_rsa_key_to_tss2(const tpm_rsa_key_t *key);
 
+extern const tpm_evdigest_t * tpm_rsa_key_public_digest(tpm_rsa_key_t *pubkey);
 #endif /* RSA_H */
