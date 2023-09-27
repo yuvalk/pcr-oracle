@@ -310,15 +310,13 @@ hexdump(const void *data, size_t size, void (*print_fn)(const char *, ...), unsi
 	}
 }
 
-/*
- * Conversion between UTF-8 and UTF-16LE for EFI event log
- */
+
 bool
-__convert_from_utf16le(char *in_string, size_t in_bytes, char *out_string, size_t out_bytes)
+__convert(const char *tocode, const char *fromcode, char *in_string, size_t in_bytes, char *out_string, size_t out_bytes)
 {
 	iconv_t *ctx;
 
-	ctx = iconv_open("utf8", "utf16le");
+	ctx = iconv_open(tocode, fromcode);
 
 	while (in_bytes) {
 		size_t converted;
@@ -336,26 +334,19 @@ __convert_from_utf16le(char *in_string, size_t in_bytes, char *out_string, size_
 	return true;
 }
 
+/*
+ * Conversion between UTF-8 and UTF-16LE for EFI event log
+ */
+bool
+__convert_from_utf16le(char *in_string, size_t in_bytes, char *out_string, size_t out_bytes)
+{
+	return __convert("utf8", "utf16le", in_string, in_bytes, out_string, out_bytes);
+}
+
 bool
 __convert_to_utf16le(char *in_string, size_t in_bytes, char *out_string, size_t out_bytes)
 {
-	iconv_t *ctx;
-
-	ctx = iconv_open("utf16le", "utf8");
-
-	while (in_bytes) {
-		size_t converted;
-
-		converted = iconv(ctx,
-				&in_string, &in_bytes,
-				&out_string, &out_bytes);
-		if (converted == (size_t) -1) {
-			perror("iconv");
-			return false;
-		}
-	}
-
-	return true;
+	return __convert("utf16le", "utf8", in_string, in_bytes, out_string, out_bytes);
 }
 
 /*
