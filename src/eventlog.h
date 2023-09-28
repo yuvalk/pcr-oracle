@@ -92,6 +92,7 @@ enum {
 	GRUB_EVENT_FILE			     = 0x0002,
 	GRUB_EVENT_KERNEL_CMDLINE	     = 0x0003,
 	SHIM_EVENT_VARIABLE		     = 0x0004,
+	SYSTEMD_EVENT_VARIABLE		     = 0x0005,
 };
 
 #define EFI_DEVICE_PATH_MAX		16
@@ -254,6 +255,11 @@ typedef struct tpm_parsed_event {
 			char *		efi_partition;
 			char *		disk_device;
 		} efi_gpt_event;
+
+		struct systemd_event {
+			unsigned int	len;
+			char *		string;
+		} systemd_event;
 	};
 } tpm_parsed_event_t;
 
