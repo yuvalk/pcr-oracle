@@ -206,7 +206,10 @@ __tpm_event_efi_variable_rehash(const tpm_event_t *ev, const tpm_parsed_event_t 
 		file_data = runtime_read_efi_variable(var_name);
 	}
 
-	if (file_data == NULL) {
+	/* The PCR 7 is always expanded, even if the data is empty */
+	if (file_data == NULL
+	    && ev->event_type != TPM2_EFI_VARIABLE_DRIVER_CONFIG
+	    && ev->pcr_index != 7) {
 		if (parsed->efi_variable_event.len == 0) {
 			/* The content of the variable doesn't exist during the measurement
 			 * and is also not available at runtime. Let's skip this event.

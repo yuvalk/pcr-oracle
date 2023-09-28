@@ -55,13 +55,19 @@ buffer_skip(buffer_t *bp, unsigned int count)
 static inline const void *
 buffer_read_pointer(const buffer_t *bp)
 {
-	return bp->data + bp->rpos;
+	if (bp)
+		return bp->data + bp->rpos;
+	else
+		return NULL;
 }
 
 static inline unsigned int
 buffer_available(const buffer_t *bp)
 {
-	return bp->wpos - bp->rpos;
+	if (bp)
+		return bp->wpos - bp->rpos;
+	else
+		return 0;
 }
 
 static inline bool
@@ -206,14 +212,17 @@ buffer_alloc_write(unsigned long size)
 static inline void
 buffer_free(buffer_t *bp)
 {
-	free(bp);
+	if (bp)
+		free(bp);
 }
 
 static inline void
 buffer_free_secret(buffer_t *bp)
 {
-	memset(bp->data, 0, bp->size);
-	free(bp);
+	if (bp) {
+		memset(bp->data, 0, bp->size);
+		free(bp);
+	}
 }
 
 static inline void *

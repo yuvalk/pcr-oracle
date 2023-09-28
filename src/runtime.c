@@ -157,7 +157,7 @@ __system_read_efi_variable(const char *var_name)
 	}
 
 	if (result == NULL)
-		error("Unable to read EFI variable \"%s\"\n", var_name);
+		debug("Unable to read EFI variable \"%s\"\n", var_name);
 	else if (testcase_recording)
 		testcase_record_efi_variable(testcase_recording, var_name, result);
 
