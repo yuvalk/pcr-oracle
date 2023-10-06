@@ -1538,3 +1538,53 @@ cleanup:
 
 	return okay;
 }
+
+bool
+pcr_policy_sign_systemd(const tpm_pcr_bank_t *bank, const char *rsakey_path,
+			const char *output_path)
+{
+	bool ok = false;
+	FILE *fp = NULL;
+	tpm_rsa_key_t *rsa_key = NULL;
+        const tpm_evdigest_t *digest;
+	ESYS_CONTEXT *esys_context = tss_esys_context();
+	TPM2B_DIGEST *pcr_policy = NULL;
+	TPMT_SIGNATURE *signed_policy = NULL;
+
+	if (!(fp = fopen(output_path, "w"))) {
+		error("Cannot open systemd JSON file %s: %m\n", output_path);
+		goto out;
+	}
+
+	if (!(rsa_key = tpm_rsa_key_read_private(rsakey_path)))
+		goto out;
+	digest = tpm_rsa_key_public_digest(rsa_key);
+
+	if (!(pcr_policy = __pcr_policy_make(esys_context, bank)))
+		goto out;
+
+	if (!__pcr_policy_sign(rsa_key, pcr_policy, &signed_policy))
+		goto out;
+
+	fprintf(fp, "{\n");
+	fprintf(fp, "\t\"%s\": [\n", bank->algo_name);
+	fprintf(fp, "\t\t\{\n");
+	fprintf(fp, "\t\t\t\"pcrs\": [\n");
+	fprintf(fp, "\t\t\t\t%s\n", print_pcr_mask(bank->pcr_mask));
+	fprintf(fp, "\t\t\t],\n");
+	fprintf(fp, "\t\t\t\"pkfp\": \"%s\",\n", print_hex_string(digest->data, digest->size));
+	fprintf(fp, "\t\t\t\"pol\": \"%s\",\n", print_hex_string(pcr_policy->buffer, pcr_policy->size));
+	fprintf(fp, "\t\t\t\"sig\": \"%s\"\n", print_base64_value(signed_policy->signature.rsassa.sig.buffer, signed_policy->signature.rsassa.sig.size));
+	fprintf(fp, "\t\t\}\n");
+	fprintf(fp, "\t]\n");
+	fprintf(fp, "}\n");
+
+	ok = true;
+
+out:
+	if (rsa_key)
+		tpm_rsa_key_free(rsa_key);
+
+	fclose(fp);
+	return ok;
+}
