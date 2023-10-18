@@ -31,6 +31,7 @@
 #include "runtime.h"
 #include "digest.h"
 #include "util.h"
+#include "sd-boot.h"
 
 #define TPM_EVENT_LOG_MAX_ALGOS		64
 
@@ -791,11 +792,27 @@ __tpm_event_systemd_describe(const tpm_parsed_event_t *parsed)
 static const tpm_evdigest_t *
 __tpm_event_systemd_rehash(const tpm_event_t *ev, const tpm_parsed_event_t *parsed, tpm_event_log_rehash_ctx_t *ctx)
 {
+	sdb_entry_list_t entry_list;
+	char initrd[1024];
+	char initrd_utf16[2048];
+	unsigned int len;
+
 	if (parsed->systemd_event.string == NULL)
 		return NULL;
 
-	/* TODO: The hashed string (UTF16) should be the new initrd command */
-	return digest_compute(ctx->algo, parsed->systemd_event.string, parsed->systemd_event.len);
+	if (!sdb_get_entry_list(&entry_list)) {
+		error("Error generating the list of boot entries\n");
+		return NULL;
+	}
+
+	debug("Next boot entry expected from: %s\n", entry_list.entries[0].path);
+	snprintf(initrd, sizeof(initrd), "initrd=%s %s",
+		 entry_list.entries[0].initrd, entry_list.entries[0].options);
+
+	len = (strlen(initrd) + 1) << 2;
+	__convert_to_utf16le(initrd, strlen(initrd) + 1, initrd_utf16, len);
+
+	return digest_compute(ctx->algo, initrd_utf16, len);
 }
 
 /*
