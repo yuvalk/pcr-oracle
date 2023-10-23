@@ -94,3 +94,34 @@ tpm_selftest(bool fulltest)
 	rc = Esys_SelfTest(esys_ctx, ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, fulltest);
 	return tss_check_error(rc, "TPM self test failed");
 }
+
+bool
+tpm_rsa_bits_test(unsigned int rsa_bits)
+{
+	ESYS_CONTEXT *esys_ctx = tss_esys_context();
+	TPMT_PUBLIC_PARMS rsa_parms = {
+		.type = TPM2_ALG_RSA,
+		.parameters = {
+			.rsaDetail = {
+				.symmetric = { TPM2_ALG_NULL },
+				.scheme = { TPM2_ALG_NULL },
+				.keyBits = rsa_bits
+			}
+		}
+	};
+	TSS2_RC rc;
+	bool okay = false;
+
+	/* Suppress the messages from tpm2-tss */
+	setenv("TSS2_LOG", "all+NONE", 1);
+
+	rc = Esys_TestParms(esys_ctx, ESYS_TR_NONE, ESYS_TR_NONE,
+			ESYS_TR_NONE, &rsa_parms);
+	if (rc == TSS2_RC_SUCCESS)
+		okay = true;
+	else if (rc != (TPM2_RC_VALUE | TPM2_RC_P | TPM2_RC_1)) {
+		tss_check_error(rc, "Esys_CreatePrimary failed");
+	}
+
+	return okay;
+}
