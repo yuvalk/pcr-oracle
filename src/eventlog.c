@@ -31,6 +31,7 @@
 #include "runtime.h"
 #include "digest.h"
 #include "util.h"
+#include "sd-boot.h"
 
 #define TPM_EVENT_LOG_MAX_ALGOS		64
 
@@ -551,7 +552,7 @@ tpm_event_decode_uuid(const unsigned char *data)
 }
 
 /*
- * Handle IPL events, which grub2 uses to hide its stuff in
+ * Handle IPL events, which grub2 and sd-boot uses to hide its stuff in
  */
 static void
 __tpm_event_grub_file_destroy(tpm_parsed_event_t *parsed)
@@ -764,6 +765,76 @@ __tpm_event_shim_event_parse(tpm_event_t *ev, tpm_parsed_event_t *parsed, const 
 	return true;
 }
 
+static void
+__tpm_event_systemd_destroy(tpm_parsed_event_t *parsed)
+{
+	drop_string(&parsed->systemd_event.string);
+}
+
+static const char *
+__tpm_event_systemd_describe(const tpm_parsed_event_t *parsed)
+{
+	static char buffer[1024];
+	char data[768];
+	unsigned int len;
+
+	/* It is in UTF16, and also include two '\0' at the end */
+	len = parsed->systemd_event.len >> 1;
+	if (len > sizeof(data))
+		len = sizeof(data);
+	__convert_from_utf16le(parsed->systemd_event.string, parsed->systemd_event.len, data, len);
+	data[len] = '\0';
+
+	snprintf(buffer, sizeof(buffer), "systemd boot event %s", data);
+	return buffer;
+}
+
+static const tpm_evdigest_t *
+__tpm_event_systemd_rehash(const tpm_event_t *ev, const tpm_parsed_event_t *parsed, tpm_event_log_rehash_ctx_t *ctx)
+{
+	sdb_entry_list_t entry_list;
+	char initrd[1024];
+	char initrd_utf16[2048];
+	unsigned int len;
+
+	if (parsed->systemd_event.string == NULL)
+		return NULL;
+
+	if (!sdb_get_entry_list(&entry_list)) {
+		error("Error generating the list of boot entries\n");
+		return NULL;
+	}
+
+	debug("Next boot entry expected from: %s\n", entry_list.entries[0].path);
+	snprintf(initrd, sizeof(initrd), "initrd=%s %s",
+		 entry_list.entries[0].initrd, entry_list.entries[0].options);
+
+	len = (strlen(initrd) + 1) << 2;
+	__convert_to_utf16le(initrd, strlen(initrd) + 1, initrd_utf16, len);
+
+	return digest_compute(ctx->algo, initrd_utf16, len);
+}
+
+/*
+ * This event holds stuff like
+ *  initrd = ....
+ */
+static bool
+__tpm_event_systemd_event_parse(tpm_event_t *ev, tpm_parsed_event_t *parsed, const char *value, unsigned int len)
+{
+	struct systemd_event *evspec = &parsed->systemd_event;
+
+	evspec->len = len;
+	evspec->string = malloc(len);
+	memcpy(evspec->string, value, len);
+
+	parsed->event_subtype = SYSTEMD_EVENT_VARIABLE;
+	parsed->destroy = __tpm_event_systemd_destroy;
+	parsed->rehash = __tpm_event_systemd_rehash;
+	parsed->describe = __tpm_event_systemd_describe;
+
+	return true;
+}
 
 static bool
 __tpm_event_parse_ipl(tpm_event_t *ev, tpm_parsed_event_t *parsed, buffer_t *bp)
@@ -787,6 +858,9 @@ __tpm_event_parse_ipl(tpm_event_t *ev, tpm_parsed_event_t *parsed, buffer_t *bp)
 
 	if (ev->pcr_index == 9)
 		return __tpm_event_grub_file_event_parse(ev, parsed, value);
+
+	if (ev->pcr_index == 12)
+		return __tpm_event_systemd_event_parse(ev, parsed, value, len);
 
 	if (ev->pcr_index == 14)
 		return __tpm_event_shim_event_parse(ev, parsed, value);

@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <iconv.h>
+#include <assert.h>
 
 #include "util.h"
 #include "digest.h"
@@ -188,6 +189,64 @@ print_octet_string(const unsigned char *data, unsigned int len)
 
 }
 
+const char *
+print_hex_string(const unsigned char *data, unsigned int len)
+{
+	static char buffer[2 * 64 + 1];
+
+	if (len <= 64) {
+		unsigned int i;
+		char *s;
+
+		s = buffer;
+		for (i = 0; i < len; ++i) {
+			sprintf(s, "%02x", data[i]);
+			s += 2;
+		}
+		*s = '\0';
+	} else {
+		snprintf(buffer, sizeof(buffer), "<%u bytes of data>", len);
+	}
+
+	return buffer;
+}
+
+const char *
+print_base64_value(const unsigned char *data, unsigned int len)
+{
+	static char buffer[2048];
+	static const char table[64] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+	unsigned int b64_len, i;
+	char *b;
+
+	b64_len = 4 * ((len + 2) / 3) + 1;
+	assert(b64_len < 2048);
+
+	b = buffer;
+	for (i = 0; (i + 2) < len; i += 3) {
+		*b++ = table[(data[i] >> 2) & 63];
+		*b++ = table[((data[i] & 3) << 4 | data[i + 1] >> 4) & 63];
+		*b++ = table[((data[i + 1] & 15) << 2 | data[i + 2] >> 6) & 63];
+		*b++ = table[data[i + 2] & 63];
+	}
+
+	if ((i + 2) == len) {
+		*b++ = table[(data[i] >> 2) & 63];
+		*b++ = table[((data[i] & 3) << 4 | data[i + 1] >> 4) & 63];
+		*b++ = table[((data[i + 1] & 15) << 2) & 63];
+		*b++ = '=';
+	} else if ((i + 1) == len) {
+		*b++ = table[(data[i] >> 2) & 63];
+		*b++ = table[((data[i] & 3) << 4) & 63];
+		*b++ = '=';
+		*b++ = '=';
+	}
+
+	*b = 0;
+
+	return buffer;
+}
+
 const tpm_evdigest_t *
 parse_digest(const char *string, const char *algo)
 {
@@ -251,15 +310,13 @@ hexdump(const void *data, size_t size, void (*print_fn)(const char *, ...), unsi
 	}
 }
 
-/*
- * Conversion between UTF-8 and UTF-16LE for EFI event log
- */
+
 bool
-__convert_from_utf16le(char *in_string, size_t in_bytes, char *out_string, size_t out_bytes)
+__convert(const char *tocode, const char *fromcode, char *in_string, size_t in_bytes, char *out_string, size_t out_bytes)
 {
 	iconv_t *ctx;
 
-	ctx = iconv_open("utf8", "utf16le");
+	ctx = iconv_open(tocode, fromcode);
 
 	while (in_bytes) {
 		size_t converted;
@@ -277,26 +334,19 @@ __convert_from_utf16le(char *in_string, size_t in_bytes, char *out_string, size_
 	return true;
 }
 
+/*
+ * Conversion between UTF-8 and UTF-16LE for EFI event log
+ */
+bool
+__convert_from_utf16le(char *in_string, size_t in_bytes, char *out_string, size_t out_bytes)
+{
+	return __convert("utf8", "utf16le", in_string, in_bytes, out_string, out_bytes);
+}
+
 bool
 __convert_to_utf16le(char *in_string, size_t in_bytes, char *out_string, size_t out_bytes)
 {
-	iconv_t *ctx;
-
-	ctx = iconv_open("utf16le", "utf8");
-
-	while (in_bytes) {
-		size_t converted;
-
-		converted = iconv(ctx,
-				&in_string, &in_bytes,
-				&out_string, &out_bytes);
-		if (converted == (size_t) -1) {
-			perror("iconv");
-			return false;
-		}
-	}
-
-	return true;
+	return __convert("utf16le", "utf8", in_string, in_bytes, out_string, out_bytes);
 }
 
 /*

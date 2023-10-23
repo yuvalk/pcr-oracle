@@ -95,6 +95,7 @@ enum {
 	OPT_PCR_POLICY,
 	OPT_KEY_FORMAT,
 	OPT_POLICY_NAME,
+	OPT_POLICY_FORMAT,
 };
 
 static struct option options[] = {
@@ -124,6 +125,7 @@ static struct option options[] = {
 	{ "pcr-policy",		required_argument,	0,	OPT_PCR_POLICY },
 	{ "key-format",		required_argument,	0,	OPT_KEY_FORMAT },
 	{ "policy-name",	required_argument,	0,	OPT_POLICY_NAME },
+	{ "policy-format",	required_argument,	0,	OPT_POLICY_FORMAT },
 
 	{ NULL }
 };
@@ -1013,7 +1015,9 @@ main(int argc, char **argv)
 	char *opt_rsa_bits = NULL;
 	char *opt_key_format = NULL;
 	char *opt_policy_name = NULL;
+	char *opt_policy_format = NULL;
 	bool tpm2key_fmt = false;
+	int systemd_json = false;
 	unsigned int rsa_bits = 2048;
 	int c, exit_code = 0;
 
@@ -1097,6 +1101,9 @@ main(int argc, char **argv)
 		case OPT_POLICY_NAME:
 			opt_policy_name = optarg;
 			break;
+		case OPT_POLICY_FORMAT:
+			opt_policy_format = optarg;
+			break;
 		case 'h':
 			usage(0, NULL);
 		default:
@@ -1135,6 +1142,14 @@ main(int argc, char **argv)
 		tpm2key_fmt = true;
 	else
 		fatal("Unsupported key format \"%s\"\n", opt_key_format);
+
+	if (!opt_policy_format || !strcasecmp(opt_policy_format, "grub2"))
+		systemd_json = false;
+	else
+	if (!strcasecmp(opt_policy_format, "systemd"))
+		systemd_json = true;
+	else
+		fatal("Unsupported policy format \"%s\"\n", opt_policy_format);
 
 	/* Validate options */
 	switch (action) {
@@ -1185,10 +1200,11 @@ main(int argc, char **argv)
 	case ACTION_SIGN:
 		if (opt_rsa_private_key == NULL)
 			usage(1, "You need to specify the --private-key option when signing a policy\n");
-		if (tpm2key_fmt) {
-			if (opt_input == NULL)
-				usage(1, "You need to specify the --input option when signing a policy into a TPM 2.0 Key file\n");
-		}
+		if (systemd_json && opt_output == NULL)
+			usage(1, "You need to specify the --output option when signing a systemd policy\n");
+		if (tpm2key_fmt && opt_input == NULL)
+			usage(1, "You need to specify the --input option when signing a policy into a TPM 2.0 Key file\n");
+
 		pcr_selection = get_pcr_selection_argument(argc, argv, opt_algo);
 		end_arguments(argc, argv);
 		break;
@@ -1306,8 +1322,13 @@ main(int argc, char **argv)
 			return 1;
 	} else
 	if (action == ACTION_SIGN) {
-		if (!pcr_policy_sign(tpm2key_fmt, &pred->prediction, opt_rsa_private_key, opt_input, opt_output, opt_policy_name))
-			return 1;
+		if (systemd_json) {
+			if (!pcr_policy_sign_systemd(&pred->prediction, opt_rsa_private_key, opt_output))
+				return 1;
+		} else {
+			if (!pcr_policy_sign(tpm2key_fmt, &pred->prediction, opt_rsa_private_key, opt_input, opt_output, opt_policy_name))
+				return 1;
+		}
 	}
 
 	return exit_code;
