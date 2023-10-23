@@ -39,6 +39,7 @@ typedef struct tpm_pcr_selection {
 	const tpm_algo_info_t *	algo_info;
 } tpm_pcr_selection_t;
 
+extern void		set_srk_rsa_bits (const unsigned int rsa_bits);
 extern void		pcr_bank_initialize(tpm_pcr_bank_t *bank, unsigned int pcr_mask, const tpm_algo_info_t *algo);
 extern bool		pcr_bank_wants_pcr(tpm_pcr_bank_t *bank, unsigned int index);
 extern void		pcr_bank_mark_valid(tpm_pcr_bank_t *bank, unsigned int index);
@@ -74,5 +75,4 @@ extern bool		pcr_unseal_secret(const tpm_pcr_selection_t *pcr_selection,
 				const char *input_path, const char *output_path);
 extern bool		pcr_policy_unseal_tpm2key(const char *input_path,
 				const char *output_path);
-
 #endif /* PCR_H */

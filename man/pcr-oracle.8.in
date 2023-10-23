@@ -270,6 +270,20 @@ To perform a TPM self-test, simply execute \fBpcr-oracle\fP like this:
 The reason this subcommand exists is that it allows an installer to
 set up full disk encryption without having to pull in all of tpm-tools.
 .\" ##################################################################
+.\" # RSA key size test
+.\" ##################################################################
+.SS TPM RSA key size test
+To perform a TPM RSA key size test, simply execute \fBpcr-oracle\fP like
+this:
+.P
+.nf
+.in +2
+# pcr-oracle --rsa-bits 2048 rsa-test
+.fi
+.P
+This subcommand allows the external programs, such as fde-tools, to find
+out the largest supported RSA key size.
+.\" ##################################################################
 .\" # OPTIONS
 .\" ##################################################################
 .SH OPTIONS
@@ -354,6 +368,12 @@ what \fBopenssl genrsa\fP does; the only reason this switch exists is
 that it may save you from increasing the footprint of your installed
 system (by not having to install the openssl command line utilities,
 for example).
+.TP
+.BI --rsa-bits " bits
+By default, RSA 2048 is used as the algorithm to create the public and
+private key and configure the storage root key(SRK) in TPM. This option
+allows the user to specify the larger RSA key size. The supported key
+sizes are: 2048, 3072, and 4096 bits.
 .TP
 .BI --tpm-eventlog " path
 By default, the tool will read the current TPM event log. It is possible

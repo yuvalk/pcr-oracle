@@ -43,6 +43,7 @@ enum {
 	ACTION_UNSEAL,
 	ACTION_SIGN,
 	ACTION_SELFTEST,
+	ACTION_RSATEST,
 };
 
 enum {
@@ -87,6 +88,7 @@ enum {
 	OPT_RSA_PRIVATE_KEY,
 	OPT_RSA_PUBLIC_KEY,
 	OPT_RSA_GENERATE_KEY,
+	OPT_RSA_BITS,
 	OPT_INPUT,
 	OPT_OUTPUT,
 	OPT_AUTHORIZED_POLICY,
@@ -115,6 +117,7 @@ static struct option options[] = {
 	{ "private-key",	required_argument,	0,	OPT_RSA_PRIVATE_KEY },
 	{ "public-key",		required_argument,	0,	OPT_RSA_PUBLIC_KEY },
 	{ "rsa-generate-key",	no_argument,		0,	OPT_RSA_GENERATE_KEY },
+	{ "rsa-bits",		required_argument,	0,	OPT_RSA_BITS },
 	{ "input",		required_argument,	0,	OPT_INPUT },
 	{ "output",		required_argument,	0,	OPT_OUTPUT },
 	{ "authorized-policy",	required_argument,	0,	OPT_AUTHORIZED_POLICY },
@@ -942,6 +945,7 @@ get_action_argument(int argc, char **argv)
 		{ "unseal-secret",		ACTION_UNSEAL	},
 		{ "sign",			ACTION_SIGN	},
 		{ "self-test",			ACTION_SELFTEST	},
+		{ "rsa-test",			ACTION_RSATEST	},
 
 		{ NULL, 0 },
 	};
@@ -1006,9 +1010,11 @@ main(int argc, char **argv)
 	char *opt_rsa_private_key = NULL;
 	char *opt_rsa_public_key = NULL;
 	bool opt_rsa_generate = false;
+	char *opt_rsa_bits = NULL;
 	char *opt_key_format = NULL;
 	char *opt_policy_name = NULL;
 	bool tpm2key_fmt = false;
+	unsigned int rsa_bits = 2048;
 	int c, exit_code = 0;
 
 	while ((c = getopt_long(argc, argv, "dhA:CF:LSZ", options, NULL)) != EOF) {
@@ -1070,6 +1076,9 @@ main(int argc, char **argv)
 		case OPT_RSA_GENERATE_KEY:
 			opt_rsa_generate = true;
 			break;
+		case OPT_RSA_BITS:
+			opt_rsa_bits = optarg;
+			break;
 		case OPT_INPUT:
 			opt_input = optarg;
 			break;
@@ -1105,6 +1114,19 @@ main(int argc, char **argv)
 
 	if (opt_create_testcase)
 		runtime_record_testcase(testcase_alloc(opt_create_testcase));
+
+	if (opt_rsa_bits) {
+		if (strcmp(opt_rsa_bits, "2048") == 0)
+			rsa_bits = 2048;
+		else
+		if (strcmp(opt_rsa_bits, "3072") == 0)
+			rsa_bits = 3072;
+		else
+		if (strcmp(opt_rsa_bits, "4096") == 0)
+			rsa_bits = 4096;
+		else
+			fatal("Unsupported RSA bits: %s\n", opt_rsa_bits);
+	}
 
 	if (!opt_key_format || !strcasecmp(opt_key_format, "raw"))
 		tpm2key_fmt = false;
@@ -1175,9 +1197,25 @@ main(int argc, char **argv)
 		end_arguments(argc, argv);
 		break;
 
+	case ACTION_RSATEST:
+		end_arguments(argc, argv);
+		break;
+
 	default:
 		fatal("Action %u not implemented", action);
 	}
+
+	if (action == ACTION_RSATEST) {
+		if (tpm_rsa_bits_test(rsa_bits)) {
+			infomsg("RSA %u supported\n", rsa_bits);
+			return 0;
+		} else {
+			infomsg("RSA %u unsupported\n", rsa_bits);
+			return 1;
+		}
+	}
+
+	set_srk_rsa_bits (rsa_bits);
 
 	if (action == ACTION_SELFTEST) {
 		if (!tpm_selftest(true))
@@ -1195,7 +1233,7 @@ main(int argc, char **argv)
 			tpm_rsa_key_t *key;
 
 			infomsg("Generating new RSA key\n");
-			if (!(key = tpm_rsa_generate(2048)))
+			if (!(key = tpm_rsa_generate(rsa_bits)))
 				return 1;
 			if (!tpm_rsa_key_write_private(opt_rsa_private_key, key))
 				return 1;

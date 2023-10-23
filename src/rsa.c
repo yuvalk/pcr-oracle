@@ -264,7 +264,7 @@ rsa_pubkey_alloc(const BIGNUM *n, const BIGNUM *e, const char *pathname)
 	unsigned int key_bits;
 
 	key_bits = BN_num_bytes(n) * 8;
-	if (key_bits != 1024 && key_bits != 2048 && key_bits != 4096) {
+	if (key_bits != 1024 && key_bits != 2048 && key_bits != 3072 && key_bits != 4096) {
 		error("%s: unsupported RSA key size (%u bits)\n", pathname, key_bits);
 		return NULL;
 	}
