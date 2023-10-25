@@ -372,12 +372,12 @@ Specify the RSA secret key to be used with authorized policies.
 Specify an RSA public key to be used with authorized policies.
 .TP
 .BI --rsa-generate-key
-When used while creating an authorized policy, this will generate
-the RSA private key "on the fly". This should not be different from
-what \fBopenssl genrsa\fP does; the only reason this switch exists is
-that it may save you from increasing the footprint of your installed
-system (by not having to install the openssl command line utilities,
-for example).
+When used while creating an authorized policy, a sign or when storing
+the public key, this will generate the RSA private key "on the
+fly". This should not be different from what \fBopenssl genrsa\fP
+does; the only reason this switch exists is that it may save you from
+increasing the footprint of your installed system (by not having to
+install the openssl command line utilities, for example).
 .TP
 .BI --rsa-bits " bits
 By default, RSA 2048 is used as the algorithm to create the public and

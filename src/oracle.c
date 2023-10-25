@@ -1221,6 +1221,22 @@ main(int argc, char **argv)
 		fatal("Action %u not implemented", action);
 	}
 
+	/* If we're asked to generate a new RSA key, do so.  This
+	 * doesn't add anything beyond what "openssl genrsa" would do,
+	 * except it saves you from installing the openssl tool suite
+	 * if you don't want it. */
+	if (opt_rsa_generate && (action == ACTION_CREATE_AUTH_POLICY ||
+				 action == ACTION_STORE_PUBLIC_KEY ||
+				 action == ACTION_SIGN)) {
+		tpm_rsa_key_t *key;
+
+		infomsg("Generating new RSA key\n");
+		if (!(key = tpm_rsa_generate(rsa_bits)))
+			return 1;
+		if (!tpm_rsa_key_write_private(opt_rsa_private_key, key))
+			return 1;
+	}
+
 	if (action == ACTION_RSATEST) {
 		if (tpm_rsa_bits_test(rsa_bits)) {
 			infomsg("RSA %u supported\n", rsa_bits);
@@ -1241,20 +1257,6 @@ main(int argc, char **argv)
 	}
 
 	if (action == ACTION_CREATE_AUTH_POLICY) {
-		/* If we're asked to generate a new RSA key, do so.
-		 * This doesn't add anything beyond what "openssl genrsa" would do,
-		 * except it saves you from installing the openssl tool suite if you
-		 * don't want it. */
-		if (opt_rsa_generate) {
-			tpm_rsa_key_t *key;
-
-			infomsg("Generating new RSA key\n");
-			if (!(key = tpm_rsa_generate(rsa_bits)))
-				return 1;
-			if (!tpm_rsa_key_write_private(opt_rsa_private_key, key))
-				return 1;
-		}
-
 		if (!pcr_authorized_policy_create(pcr_selection, opt_rsa_private_key, opt_authorized_policy))
 			return 1;
 
