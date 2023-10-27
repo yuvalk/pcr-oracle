@@ -212,6 +212,16 @@ format, which combines key and policies into a single, ASN.1 encoded file.
 The behavior can be selected by invoking the \fBsign\fP, \fBseal-secret\fP
 and \fBunseal-secret\fP operations with the \fB--key-format=tpm2.0\fP
 option. For examples, please see the \fBEXAMPLES\fP section below.
+.P
+Optionally, \fBpcr-oracle\fP can create \fBJSON\fP files compatible
+with the \fBsystemd-cryptenroll\fP tool when signing a policy.  The
+generated document will contain a grouped list by hash algorithms
+(sha256 by default) of the different possible valid signed policies
+that the systemd-cryptsetup can recognize during boot time.  Each
+entry will contain the list of PCRs that compose the PCR policy, a
+hash of the public key, the hash of the policy and the signature (in
+base64) of the PCR policy.  This document is generated with the
+\fB--policy-format systemd\fP parameter.
 .\" ##################################################################
 .\" # Test Cases
 .\" ##################################################################
@@ -441,6 +451,31 @@ To sign the policy against PCR 0,2,4,7 for sealed-auth.tpm:
 	--input sealed-auth.tpm \\
 	--output sealed-auth-signed.tpm \\
 	sign 0,2,4,7
+.fi
+.P
+To generate a signed policy compatible with systemd:
+.P
+.nf
+.in +2
+# pcr-oracle \\
+	--private-key policy-key.pem \\
+	--from eventlog \\
+	--output tpm2-pcr-signature.json \\
+	--policy-format systemd \\
+	sign 0,2,4,7
+.fi
+.P
+This can be registered with:
+.P
+.nf
+.in +2
+# systemd-cryptenroll \\
+	--tpm2-device=auto \\
+	--tpm2-public-key=public-key.pem \\
+	--tpm2-public-key-pcrs="0,2,4,7" \
+	--tpm2-signature=tpm2-pcr-signature.json \\
+	--policy-format systemd \\
+	/dev/sda3
 .fi
 .\" ##################################################################
 .\" # SEE ALSO
