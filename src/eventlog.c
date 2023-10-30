@@ -23,6 +23,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <unistd.h>
+#include <assert.h>
 
 #include <tss2/tss2_tpm2_types.h>
 
@@ -793,8 +794,8 @@ static const tpm_evdigest_t *
 __tpm_event_systemd_rehash(const tpm_event_t *ev, const tpm_parsed_event_t *parsed, tpm_event_log_rehash_ctx_t *ctx)
 {
 	sdb_entry_list_t entry_list;
-	char initrd[1024];
-	char initrd_utf16[2048];
+	char initrd[2048];
+	char initrd_utf16[4096];
 	unsigned int len;
 
 	if (parsed->systemd_event.string == NULL)
@@ -810,6 +811,7 @@ __tpm_event_systemd_rehash(const tpm_event_t *ev, const tpm_parsed_event_t *pars
 		 entry_list.entries[0].initrd, entry_list.entries[0].options);
 
 	len = (strlen(initrd) + 1) << 2;
+	assert(len <= sizeof(initrd_utf16));
 	__convert_to_utf16le(initrd, strlen(initrd) + 1, initrd_utf16, len);
 
 	return digest_compute(ctx->algo, initrd_utf16, len);
