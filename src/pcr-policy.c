@@ -1580,7 +1580,7 @@ pcr_policy_sign_systemd(const tpm_pcr_bank_t *bank, const char *rsakey_path,
 	fprintf(fp, "\t\t\t\"pkfp\": \"%s\",\n", print_hex_string(digest->data, digest->size));
 	fprintf(fp, "\t\t\t\"pol\": \"%s\",\n", print_hex_string(pcr_policy->buffer, pcr_policy->size));
 	fprintf(fp, "\t\t\t\"sig\": \"%s\"\n", print_base64_value(signed_policy->signature.rsassa.sig.buffer, signed_policy->signature.rsassa.sig.size));
-	fprintf(fp, "\t\t\}\n");
+	fprintf(fp, "\t\t}\n");
 	fprintf(fp, "\t]\n");
 	fprintf(fp, "}\n");
 
