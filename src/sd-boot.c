@@ -44,10 +44,10 @@ read_entry_token()
 	if (fgets(id, SDB_LINE_MAX, fp))
 		id[strcspn(id, "\n")] = 0;
 
+	fclose(fp);
 	return id;
 
 fail:
-	fclose(fp);
 	return NULL;
 }
 
@@ -91,6 +91,7 @@ read_os_release(const char *key)
 		}
 		id[k] = '\0';
 
+		fclose(fp);
 		return id;
 
 next_line:
@@ -98,7 +99,6 @@ next_line:
 	}
 
 fail:
-	fclose(fp);
 	return NULL;
 }
 
@@ -116,10 +116,10 @@ read_machine_id()
 	if (fgets(id, SDB_LINE_MAX, fp))
 		id[strcspn(id, "\n")] = 0;
 
+	fclose(fp);
 	return id;
 
 fail:
-	fclose(fp);
 	return NULL;
 }
 
@@ -161,10 +161,10 @@ read_entry(sdb_entry_data_t *result)
 		strncpy(dest, &line[index], strlen(&line[index]) - 1);
 	}
 
+	fclose(fp);
 	return true;
 
 fail:
-	fclose(fp);
 	return false;
 }
 
