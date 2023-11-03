@@ -277,10 +277,27 @@ entrycmp(const void *va, const void *vb)
 	return -result;
 }
 
+static bool
+exists_efi_dir(const char *path)
+{
+	DIR *d = NULL;
+	char full_path[PATH_MAX];
+
+	if (path == NULL)
+		return false;
+
+	snprintf(full_path, PATH_MAX, "/boot/efi/%s", path);
+	if (!(d = opendir(full_path)))
+		return false;
+
+	closedir(d);
+	return true;
+}
+
 bool
 sdb_get_entry_list(sdb_entry_list_t *result)
 {
-	// const char *id = NULL;
+	const char *id = NULL;
 	const char *image_id = NULL;
 	const char *machine_id = NULL;
 	const char *token_id = NULL;
@@ -292,16 +309,19 @@ sdb_get_entry_list(sdb_entry_list_t *result)
 
 	/* All IDs are optional (cannot be present), except machine_id */
 	token_id = read_entry_token();
-	// id = read_os_release("ID");
+	id = read_os_release("ID");
 	image_id = read_os_release("IMAGE_ID");
 	if (!(machine_id = read_machine_id()))
 		goto fail;
 
-	/* The order is not correct (ID is not used), but is how
-	 * sdbootutil seems to work */
-	if (token_id == NULL && image_id != NULL)
-		token_id = image_id;
-	if (token_id == NULL && machine_id != NULL)
+	/* The order is not correct, and it is using some heuristics
+	 * to find the correct prefix.  Other tools like sdbootutil
+	 * seems to use parameters to decide */
+	if (token_id == NULL && exists_efi_dir(id))
+		token_id = id;
+	if (token_id == NULL && exists_efi_dir(image_id))
+		token_id = id;
+	if (token_id == NULL && exists_efi_dir(machine_id))
 		token_id = machine_id;
 
 	if (!(d = opendir(path))) {
@@ -326,10 +346,9 @@ sdb_get_entry_list(sdb_entry_list_t *result)
 
 	qsort(result->entries, result->num_entries, sizeof(result->entries[0]), entrycmp);
 
+	closedir(d);
 	return true;
 
 fail:
-	closedir(d);
 	return false;
 }
-
