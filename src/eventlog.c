@@ -810,7 +810,7 @@ __tpm_event_systemd_rehash(const tpm_event_t *ev, const tpm_parsed_event_t *pars
 	snprintf(initrd, sizeof(initrd), "initrd=%s %s",
 		 entry_list.entries[0].initrd, entry_list.entries[0].options);
 
-	len = (strlen(initrd) + 1) << 2;
+	len = (strlen(initrd) + 1) << 1;
 	assert(len <= sizeof(initrd_utf16));
 	__convert_to_utf16le(initrd, strlen(initrd) + 1, initrd_utf16, len);
 
