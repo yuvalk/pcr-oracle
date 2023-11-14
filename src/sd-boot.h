@@ -31,6 +31,7 @@ typedef struct sdb_entry_data {
 	char	machine_id[SDB_LINE_MAX];
 	char	version[SDB_LINE_MAX];
 	char	options[SDB_LINE_MAX];
+	char	image[SDB_LINE_MAX];
 	char	initrd[SDB_LINE_MAX];
 } sdb_entry_data_t;
 
@@ -40,5 +41,7 @@ typedef struct sdb_entry_list {
 } sdb_entry_list_t;
 
 extern bool			sdb_get_entry_list(sdb_entry_list_t *result);
+extern bool			sdb_is_kernel(const char *application);
+extern const char *		sdb_get_next_kernel(void);
 
 #endif /* SD_BOOT_H */

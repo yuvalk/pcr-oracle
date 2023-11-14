@@ -801,6 +801,7 @@ __tpm_event_systemd_rehash(const tpm_event_t *ev, const tpm_parsed_event_t *pars
 	if (parsed->systemd_event.string == NULL)
 		return NULL;
 
+	memset(&entry_list, 0, sizeof(entry_list));
 	if (!sdb_get_entry_list(&entry_list)) {
 		error("Error generating the list of boot entries\n");
 		return NULL;
