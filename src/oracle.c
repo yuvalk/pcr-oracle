@@ -559,6 +559,9 @@ predictor_get_event_strategy(unsigned int event_type)
 		/* IPL: used by grub2 for PCR 8 and PCR9 */
 		TPM2_EVENT_IPL,
 
+		/* EVENT_TAG: used by the kernel for PCR9, to measure the cmdline and initrd */
+		TPM2_EVENT_EVENT_TAG,
+
 		/*
 		 * EFI_GPT_EVENT: used in updates of PCR5, seems to be a hash of several GPT headers.
 		 *	We should probably rebuild in case someone changed the partitioning.
