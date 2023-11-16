@@ -31,7 +31,7 @@
 
 
 static const char *
-read_entry_token()
+read_entry_token(void)
 {
 	static char id[SDB_LINE_MAX];
 	FILE *fp;
@@ -103,7 +103,7 @@ fail:
 }
 
 static const char *
-read_machine_id()
+read_machine_id(void)
 {
 	static char id[SDB_LINE_MAX];
 	FILE *fp;
@@ -148,6 +148,9 @@ read_entry(sdb_entry_data_t *result)
 		else
 		if (!strncmp("options", line, strlen("options")))
 			dest = result->options;
+		else
+		if (!strncmp("linux", line, strlen("linux")))
+			dest = result->image;
 		else
 		if (!strncmp("initrd", line, strlen("initrd")))
 			dest = result->initrd;
@@ -294,25 +297,20 @@ exists_efi_dir(const char *path)
 	return true;
 }
 
-bool
-sdb_get_entry_list(sdb_entry_list_t *result)
+static const char *
+get_token_id(void)
 {
+	static const char *token_id = NULL;
 	const char *id = NULL;
 	const char *image_id = NULL;
 	const char *machine_id = NULL;
-	const char *token_id = NULL;
-	DIR *d = NULL;
-	struct dirent *dir;
-	char *path = "/boot/efi/loader/entries";
-
-	memset(result, 0, sizeof(*result));
 
 	/* All IDs are optional (cannot be present), except machine_id */
 	token_id = read_entry_token();
 	id = read_os_release("ID");
 	image_id = read_os_release("IMAGE_ID");
 	if (!(machine_id = read_machine_id()))
-		goto fail;
+		return NULL;
 
 	/* The order is not correct, and it is using some heuristics
 	 * to find the correct prefix.  Other tools like sdbootutil
@@ -324,12 +322,29 @@ sdb_get_entry_list(sdb_entry_list_t *result)
 	if (token_id == NULL && exists_efi_dir(machine_id))
 		token_id = machine_id;
 
+	return token_id;
+}
+
+bool
+sdb_get_entry_list(sdb_entry_list_t *result)
+{
+	const char *token_id = NULL;
+	DIR *d = NULL;
+	struct dirent *dir;
+	char *path = "/boot/efi/loader/entries";
+
+	if (!(token_id = get_token_id()))
+		goto fail;
+
 	if (!(d = opendir(path))) {
 		error("Cannot read directory contents from /boot/efi/loader/entries: %m\n");
 		goto fail;
 	}
 
 	while ((dir = readdir(d)) != NULL) {
+		if (result->num_entries >= SDB_MAX_ENTRIES)
+			break;
+
 		if (strncmp(token_id, dir->d_name, strlen(token_id)))
 			continue;
 
@@ -351,4 +366,46 @@ sdb_get_entry_list(sdb_entry_list_t *result)
 
 fail:
 	return false;
+}
+
+bool
+sdb_is_kernel(const char *application)
+{
+	const char *token_id;
+	const char *prefix = "linux-";
+	char path[PATH_MAX];
+
+	if (!(token_id = get_token_id()))
+		goto fail;
+
+	snprintf(path, PATH_MAX, "/%s/", token_id);
+	if (strncmp(path, application, strlen(path)))
+		goto fail;
+
+	strncpy(path, application, PATH_MAX);
+	for (char *ptr = strtok(path, "/"); ptr; ptr = strtok(NULL, "/"))
+		if (!strncmp(ptr, prefix, strlen(prefix)))
+			return true;
+
+fail:
+	return false;
+}
+
+const char *
+sdb_get_next_kernel(void)
+{
+	static char result[SDB_LINE_MAX];
+	sdb_entry_list_t entry_list;
+
+	memset(&entry_list, 0, sizeof(entry_list));
+	if (!sdb_get_entry_list(&entry_list)) {
+		error("Error generating the list of boot entries\n");
+		goto fail;
+	}
+
+	strncpy(result, entry_list.entries[0].image, SDB_LINE_MAX);
+	return result;
+
+fail:
+	return NULL;
 }

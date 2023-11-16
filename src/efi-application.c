@@ -31,6 +31,7 @@
 #include "runtime.h"
 #include "authenticode.h"
 #include "digest.h"
+#include "sd-boot.h"
 #include "util.h"
 
 
@@ -224,9 +225,8 @@ __pecoff_rehash_old(tpm_event_log_rehash_ctx_t *ctx, const char *filename)
 }
 
 static const tpm_evdigest_t *
-__efi_application_rehash_direct(const tpm_parsed_event_t *parsed, tpm_event_log_rehash_ctx_t *ctx)
+__efi_application_rehash_direct(const struct efi_bsa_event *evspec, tpm_event_log_rehash_ctx_t *ctx)
 {
-	const struct efi_bsa_event *evspec = &parsed->efi_bsa_event;
 	const tpm_evdigest_t *md;
 	digest_ctx_t *digest;
 
@@ -278,6 +278,8 @@ static const tpm_evdigest_t *
 __tpm_event_efi_bsa_rehash(const tpm_event_t *ev, const tpm_parsed_event_t *parsed, tpm_event_log_rehash_ctx_t *ctx)
 {
 	const struct efi_bsa_event *evspec = &parsed->efi_bsa_event;
+	const char *new_application;
+	struct efi_bsa_event evspec_clone;
 
 	/* Some BSA events do not refer to files, but to some data blobs residing somewhere on a device.
 	 * We're not yet prepared to handle these, so we hope the user doesn't mess with them, and
@@ -288,10 +290,20 @@ __tpm_event_efi_bsa_rehash(const tpm_event_t *ev, const tpm_parsed_event_t *pars
 		return tpm_event_get_digest(ev, ctx->algo->openssl_name);
 	}
 
+	/* The next boot can have a different kernel */
+	if (sdb_is_kernel(evspec->efi_application)) {
+		new_application = sdb_get_next_kernel();
+		if (new_application) {
+			evspec_clone = *evspec;
+			evspec_clone.efi_application = strdup(new_application);
+			evspec = &evspec_clone;
+		}
+	}
+
 	if (ctx->use_pesign)
 		return __efi_application_rehash_pesign(ctx, evspec->efi_partition, evspec->efi_application);
 
-	return __efi_application_rehash_direct(parsed, ctx);
+	return __efi_application_rehash_direct(evspec, ctx);
 }
 
 #define EFI_MAX_SIGNATURES	16

@@ -95,6 +95,11 @@ enum {
 	SYSTEMD_EVENT_VARIABLE		     = 0x0005,
 };
 
+enum {
+	LOAD_OPTIONS_EVENT_TAG_ID	     = 0x8F3B22EDU,
+	INITRD_EVENT_TAG_ID		     = 0x8F3B22ECU,
+};
+
 #define EFI_DEVICE_PATH_MAX		16
 
 typedef struct efi_device_path {
@@ -260,6 +265,12 @@ typedef struct tpm_parsed_event {
 			unsigned int	len;
 			char *		string;
 		} systemd_event;
+
+		struct tag_event {
+			uint32_t	event_id;
+			uint32_t	event_data_len;
+			char		event_data[52];
+		} tag_event;
 	};
 } tpm_parsed_event_t;
 
