@@ -795,7 +795,6 @@ __tpm_event_systemd_rehash(const tpm_event_t *ev, const tpm_parsed_event_t *pars
 {
 	sdb_entry_list_t entry_list;
 	char initrd[2048];
-	char initrd_path[1024];
 	char initrd_utf16[4096];
 	unsigned int len;
 
@@ -806,12 +805,9 @@ __tpm_event_systemd_rehash(const tpm_event_t *ev, const tpm_parsed_event_t *pars
 	}
 
 	debug("Next boot entry expected from: %s\n", entry_list.entries[0].path);
-	strncpy(initrd_path, entry_list.entries[0].initrd, sizeof(initrd_path) - 1);
-	for (char *c = initrd_path; *c; ++c) {
-		if (*c == '/')
-			*c = '\\';
-	}
-	snprintf(initrd, sizeof(initrd), "initrd=%s %s", initrd_path, entry_list.entries[0].options);
+	snprintf(initrd, sizeof(initrd), "initrd=%s %s",
+			path_unix2dos(entry_list.entries[0].path),
+			entry_list.entries[0].options);
 
 	len = (strlen(initrd) + 1) << 1;
 	assert(len <= sizeof(initrd_utf16));

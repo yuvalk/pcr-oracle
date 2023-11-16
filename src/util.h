@@ -128,9 +128,7 @@ extern const tpm_evdigest_t *parse_digest(const char *string, const char *algo);
 
 extern void		hexdump(const void *data, size_t size, void (*)(const char *, ...), unsigned int indent);
 extern const char *	print_octet_string(const unsigned char *data, unsigned int len);
-
 extern const char *	print_hex_string(const unsigned char *data, unsigned int len);
-
 extern const char *	print_base64_value(const unsigned char *data, unsigned int len);
 
 extern bool		__convert_from_utf16le(char *in_string, size_t in_bytes, char *out_string, size_t out_bytes);
@@ -138,6 +136,8 @@ extern bool		__convert_to_utf16le(char *in_string, size_t in_bytes, char *out_st
 
 extern double		timing_begin(void);
 extern double		timing_since(double);
+
+extern const char *	path_unix2dos(const char *path);
 
 extern int		version_string_compare(const char *, const char *);
 

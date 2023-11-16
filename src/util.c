@@ -452,3 +452,23 @@ version_string_compare(const char *ver_a, const char *ver_b)
 
 	return parsed_version_compare(&a, &b);
 }
+
+const char *
+path_unix2dos(const char *path)
+{
+	static char result[PATH_MAX];
+	char *s;
+
+	if (strlen(path) >= sizeof(result)) {
+		error("%s: path \"%s\" too long\n", __func__, path);
+		return NULL;
+	}
+
+	strcpy(result, path);
+	for (s = result; *s; ++s) {
+		if (*s == '/')
+			*s = '\\';
+	}
+
+	return result;
+}
