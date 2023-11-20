@@ -271,8 +271,8 @@ read_signature(const char *path, TPMT_SIGNATURE **ret)
 	return ok;
 }
 
-static bool
-write_public_key(const char *path, const TPM2B_PUBLIC *s)
+bool
+tss_write_public_key(const char *path, const TPM2B_PUBLIC *s)
 {
 	buffer_t *bp;
 	int rc;
@@ -291,29 +291,27 @@ cleanup:
 	return ok;
 }
 
-static bool
-read_public_key(const char *path, TPM2B_PUBLIC **ret)
+TPM2B_PUBLIC *
+tss_read_public_key(const char *path)
 {
-	TPM2B_PUBLIC *pub_key;
+	TPM2B_PUBLIC *pub_key, *result = NULL;
 	buffer_t *bp;
 	int rc;
-	bool ok = false;
 
 	if (!(bp = buffer_read_file(path, 0)))
-		return false;
+		return NULL;
 
 	pub_key = calloc(1, sizeof(*pub_key));
 	rc = Tss2_MU_TPM2B_PUBLIC_Unmarshal(bp->data, bp->size, &bp->rpos, pub_key);
 	if (tss_check_error(rc, "Tss2_MU_TPM2B_PUBLIC_Unmarshal failed")) {
-		*ret = pub_key;
-		ok = true;
+		result = pub_key;
 	} else {
 		error("%s does not seem to contain a valid public key\n", path);
 		free(pub_key);
 	}
 
 	buffer_free(bp);
-	return ok;
+	return result;
 }
 
 static bool
@@ -1002,7 +1000,7 @@ pcr_store_public_key(const char *rsakey_path, const char *output_path)
 	 || !(pub_key = tpm_rsa_key_to_tss2(rsa_key)))
 		goto cleanup;
 
-	okay = write_public_key(output_path, pub_key);
+	okay = tss_write_public_key(output_path, pub_key);
 
 cleanup:
 	if (rsa_key)
@@ -1242,7 +1240,7 @@ pcr_authorized_policy_unseal_secret(const tpm_pcr_selection_t *pcr_selection,
 	TPM2B_SENSITIVE_DATA *unsealed = NULL;
 	bool okay = false;
 
-	if (!read_public_key(rsakey_path, &pub_key))
+	if (!(pub_key = tss_read_public_key(rsakey_path)))
 		goto cleanup;
 
 	if (!read_sealed_secret(input_path, &sealed_public, &sealed_private))
