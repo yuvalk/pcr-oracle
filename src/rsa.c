@@ -57,7 +57,11 @@ tpm_rsa_key_alloc(const char *path, EVP_PKEY *pkey, bool priv)
 void
 tpm_rsa_key_free(tpm_rsa_key_t *key)
 {
-	/* TBD */
+	drop_string(&key->path);
+	if (key->pkey) {
+		EVP_PKEY_free(key->pkey);
+		key->pkey = NULL;
+	}
 }
 
 /*
