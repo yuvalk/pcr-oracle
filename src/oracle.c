@@ -32,6 +32,7 @@
 #include "pcr.h"
 #include "digest.h"
 #include "rsa.h"
+#include "store.h"
 #include "testcase.h"
 
 enum {
@@ -1012,8 +1013,8 @@ main(int argc, char **argv)
 	char *opt_output = NULL;
 	char *opt_authorized_policy = NULL;
 	char *opt_pcr_policy = NULL;
-	char *opt_rsa_private_key = NULL;
-	char *opt_rsa_public_key = NULL;
+	stored_key_t *opt_rsa_private_key = NULL;
+	stored_key_t *opt_rsa_public_key = NULL;
 	bool opt_rsa_generate = false;
 	char *opt_rsa_bits = NULL;
 	char *opt_key_format = NULL;
@@ -1075,10 +1076,12 @@ main(int argc, char **argv)
 			opt_replay_testcase = optarg;
 			break;
 		case OPT_RSA_PRIVATE_KEY:
-			opt_rsa_private_key = optarg;
+			/* The private key file uses PEM format by default */
+			opt_rsa_private_key = stored_key_new_private(STORED_KEY_FMT_PEM, optarg);
 			break;
 		case OPT_RSA_PUBLIC_KEY:
-			opt_rsa_public_key = optarg;
+			/* The public key file uses native TPM format by default */
+			opt_rsa_public_key = stored_key_new_private(STORED_KEY_FMT_NATIVE, optarg);
 			break;
 		case OPT_RSA_GENERATE_KEY:
 			opt_rsa_generate = true;
@@ -1164,8 +1167,8 @@ main(int argc, char **argv)
 	case ACTION_STORE_PUBLIC_KEY:
 		if (opt_rsa_private_key == NULL)
 			usage(1, "You need to specify the RSA secret key using --private-key option\n");
-		if (opt_rsa_public_key == NULL)
-			opt_rsa_public_key = opt_output;
+		if (opt_rsa_public_key == NULL && opt_output)
+			opt_rsa_public_key = stored_key_new_public(STORED_KEY_FMT_NATIVE, opt_output);
 		end_arguments(argc, argv);
 		break;
 
@@ -1236,7 +1239,7 @@ main(int argc, char **argv)
 		infomsg("Generating new RSA key\n");
 		if (!(key = tpm_rsa_generate(rsa_bits)))
 			return 1;
-		if (!tpm_rsa_key_write_private(opt_rsa_private_key, key))
+		if (!stored_key_write_rsa_private(opt_rsa_private_key, key))
 			return 1;
 	}
 
