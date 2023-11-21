@@ -27,6 +27,8 @@ typedef struct tpm_rsa_key	tpm_rsa_key_t;
 
 extern tpm_rsa_key_t *	tpm_rsa_key_read_public(const char *pathname);
 extern tpm_rsa_key_t *	tpm_rsa_key_read_private(const char *pathname);
+extern bool		tpm_rsa_key_write_public(const char *pathname,
+				const tpm_rsa_key_t *key);
 extern bool		tpm_rsa_key_write_private(const char *pathname,
 				const tpm_rsa_key_t *key);
 extern void		tpm_rsa_key_free(tpm_rsa_key_t *key);
