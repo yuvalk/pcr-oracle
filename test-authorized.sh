@@ -43,6 +43,25 @@ call_oracle \
 	--public-key policy-pubkey \
 	store-public-key
 
+# Write the same public key, but as PEM file.
+call_oracle \
+	--private-key policy-key.pem \
+	--public-key policy-pubkey.pem \
+	store-public-key
+
+# Make sure that the PEM formatted public key we extracted matches what openssl would produce
+openssl rsa -inform PEM -in policy-key.pem -outform PEM -out pubkey2.pem -pubout
+if ! cmp pubkey2.pem policy-pubkey.pem; then
+	echo "BAD: storing the public key did not generate the same PEM file as openssl did"
+	for fname in policy-pubkey.pem pubkey2.pem; do
+		echo "$fname"
+		cat $fname
+		echo
+	done
+	exit 1
+fi
+rm -f pubkey2.pem
+
 call_oracle \
 	--auth authorized.policy \
 	--input secret \
