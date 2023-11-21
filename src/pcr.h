@@ -57,19 +57,23 @@ extern void		pcr_selection_free(tpm_pcr_selection_t *);
 
 extern bool		pcr_read_into_bank(tpm_pcr_bank_t *bank);
 extern bool		pcr_authorized_policy_create(const tpm_pcr_selection_t *pcr_selection,
-				const char *rsakey_path, const char *output_path);
-extern bool		pcr_store_public_key(const char *rsakey_path, const char *output_path);
+				const stored_key_t *private_key_file,
+				const char *output_path);
+extern bool		pcr_store_public_key(const stored_key_t *private_key_file,
+				const stored_key_t *public_key_file);
 extern bool		pcr_policy_sign(const bool tpm2key_fmt, const tpm_pcr_bank_t *bank,
-				const char *rsakey_path, const char *input_path,
+				const stored_key_t *private_key_file,
+				const char *input_path,
 				const char *output_path, const char *policy_name);
-extern bool		pcr_policy_sign_systemd(const tpm_pcr_bank_t *bank, const char *rsakey_path,
+extern bool		pcr_policy_sign_systemd(const tpm_pcr_bank_t *bank,
+				const stored_key_t *private_key_file,
 				const char *output_path);
 extern bool		pcr_authorized_policy_seal_secret(const bool tpm2key_fmt,
 				const char *authorized_policy, const char *input_path,
 				const char *output_path);
 extern bool		pcr_authorized_policy_unseal_secret(const tpm_pcr_selection_t *pcr_selection,
 				const char *signed_policy_path,
-				const char *rsakey_path,
+				const stored_key_t *public_key_file,
 				const char *input_path, const char *output_path);
 extern bool		pcr_seal_secret(const bool tpm2key_fmt, const tpm_pcr_bank_t *bank,
 				const char *input_path, const char *output_path);

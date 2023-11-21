@@ -34,6 +34,7 @@
 #include "runtime.h"
 #include "pcr.h"
 #include "digest.h"
+#include "store.h"
 #include "rsa.h"
 #include "bufparser.h"
 #include "tpm.h"
@@ -867,16 +868,16 @@ __pcr_policy_sign(const tpm_rsa_key_t *rsa_key, const TPM2B_DIGEST *authorized_p
 }
 
 static bool
-__pcr_policy_create_authorized(ESYS_CONTEXT *esys_context, const tpm_pcr_selection_t *pcr_selection, const char *rsakey_path, TPM2B_DIGEST **ret_digest_p)
+__pcr_policy_create_authorized(ESYS_CONTEXT *esys_context, const tpm_pcr_selection_t *pcr_selection,
+				const stored_key_t *private_key_file,
+				TPM2B_DIGEST **ret_digest_p)
 {
 	tpm_pcr_bank_t zero_bank;
 	TPM2B_DIGEST *pcr_policy = NULL;
-	tpm_rsa_key_t *rsa_key = NULL;
 	TPM2B_PUBLIC *pub_key = NULL;
 	bool okay = false;
 
-	if (!(rsa_key = tpm_rsa_key_read_private(rsakey_path))
-	 || !(pub_key = tpm_rsa_key_to_tss2(rsa_key)))
+	if (!(pub_key = stored_key_read_native_public(private_key_file)))
 		goto out;
 
 	/* Create a PCR policy using all-zeros for the selection of PCRs we're
@@ -893,8 +894,6 @@ out:
 		free(pcr_policy);
 	if (pub_key)
 		free(pub_key);
-	if (rsa_key)
-		tpm_rsa_key_free(rsa_key);
 
 	return okay;
 }
@@ -990,23 +989,17 @@ cleanup:
  * in a boot loader (where you do NOT want to handle PEM/DER/ASN.1)
  */
 bool
-pcr_store_public_key(const char *rsakey_path, const char *output_path)
+pcr_store_public_key(const stored_key_t *private_key_file, const stored_key_t *public_key_file)
 {
-	tpm_rsa_key_t *rsa_key = NULL;
-	TPM2B_PUBLIC *pub_key = NULL;
+	tpm_rsa_key_t *pub_key;
 	bool okay = false;
 
-	if (!(rsa_key = tpm_rsa_key_read_private(rsakey_path))
-	 || !(pub_key = tpm_rsa_key_to_tss2(rsa_key)))
-		goto cleanup;
+	/* Read the public key from the private key file */
+	if ((pub_key = stored_key_read_rsa_public(private_key_file)) != NULL) {
+		okay = stored_key_write_rsa_public(public_key_file, pub_key);
+		tpm_rsa_key_free(pub_key);
+	}
 
-	okay = tss_write_public_key(output_path, pub_key);
-
-cleanup:
-	if (rsa_key)
-		tpm_rsa_key_free(rsa_key);
-	if (pub_key)
-		free(pub_key);
 	return okay;
 }
 
@@ -1069,13 +1062,13 @@ cleanup:
 
 
 bool
-pcr_authorized_policy_create(const tpm_pcr_selection_t *pcr_selection, const char *rsakey_path, const char *output_path)
+pcr_authorized_policy_create(const tpm_pcr_selection_t *pcr_selection, const stored_key_t *private_key_file, const char *output_path)
 {
 	ESYS_CONTEXT *esys_context = tss_esys_context();
 	TPM2B_DIGEST *authorized_policy = NULL;
 	bool ok;
 
-	ok = __pcr_policy_create_authorized(esys_context, pcr_selection, rsakey_path, &authorized_policy);
+	ok = __pcr_policy_create_authorized(esys_context, pcr_selection, private_key_file, &authorized_policy);
 	if (ok && write_digest(output_path, authorized_policy))
 		infomsg("Authorized policy written to %s\n", output_path?: "(standard output)");
 
@@ -1153,7 +1146,8 @@ cleanup:
  * expected PCR values, and signing the resulting digest.
  */
 bool
-pcr_policy_sign(const bool tpm2key_fmt, const tpm_pcr_bank_t *bank, const char *rsakey_path,
+pcr_policy_sign(const bool tpm2key_fmt, const tpm_pcr_bank_t *bank,
+		const stored_key_t *private_key_file,
 		const char *input_path, const char *output_path, const char *policy_name)
 {
 	ESYS_CONTEXT *esys_context = tss_esys_context();
@@ -1165,7 +1159,7 @@ pcr_policy_sign(const bool tpm2key_fmt, const tpm_pcr_bank_t *bank, const char *
 	TPML_PCR_SELECTION pcr_sel;
 	bool okay = false;
 
-	if (!(rsa_key = tpm_rsa_key_read_private(rsakey_path)))
+	if (!(rsa_key = stored_key_read_rsa_private(private_key_file)))
 		goto out;
 
 	if (tpm2key_fmt) {
@@ -1227,7 +1221,7 @@ out:
 bool
 pcr_authorized_policy_unseal_secret(const tpm_pcr_selection_t *pcr_selection,
 				const char *signed_policy_path,
-				const char *rsakey_path,
+				const stored_key_t *public_key_file,
                                 const char *input_path, const char *output_path)
 {
 	ESYS_CONTEXT *esys_context = tss_esys_context();
@@ -1240,7 +1234,7 @@ pcr_authorized_policy_unseal_secret(const tpm_pcr_selection_t *pcr_selection,
 	TPM2B_SENSITIVE_DATA *unsealed = NULL;
 	bool okay = false;
 
-	if (!(pub_key = tss_read_public_key(rsakey_path)))
+	if (!(pub_key = stored_key_read_native_public(public_key_file)))
 		goto cleanup;
 
 	if (!read_sealed_secret(input_path, &sealed_public, &sealed_private))
@@ -1543,7 +1537,8 @@ cleanup:
 }
 
 bool
-pcr_policy_sign_systemd(const tpm_pcr_bank_t *bank, const char *rsakey_path,
+pcr_policy_sign_systemd(const tpm_pcr_bank_t *bank,
+			const stored_key_t *private_key_file,
 			const char *output_path)
 {
 	bool ok = false;
@@ -1559,7 +1554,7 @@ pcr_policy_sign_systemd(const tpm_pcr_bank_t *bank, const char *rsakey_path,
 		goto out;
 	}
 
-	if (!(rsa_key = tpm_rsa_key_read_private(rsakey_path)))
+	if (!(rsa_key = stored_key_read_rsa_private(private_key_file)))
 		goto out;
 	digest = tpm_rsa_key_public_digest(rsa_key);
 
