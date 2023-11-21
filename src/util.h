@@ -139,6 +139,7 @@ extern double		timing_since(double);
 
 extern const char *	path_unix2dos(const char *path);
 extern const char *	path_dos2unix(const char *path);
+extern bool		path_has_file_extension(const char *path, const char *suffix);
 
 extern int		version_string_compare(const char *, const char *);
 

@@ -488,3 +488,22 @@ path_dos2unix(const char *path)
 
 	return result;
 }
+
+bool
+path_has_file_extension(const char *path, const char *suffix)
+{
+	int suffix_len, n;
+
+	if (*suffix == '.')
+		++suffix;
+	suffix_len = strlen(suffix);
+
+	n = strlen(path) - suffix_len;
+	if (n <= 0)
+		return false;
+
+	if (path[n-1] != '.')
+		return false;
+
+	return !strcasecmp(path + n, suffix);
+}
