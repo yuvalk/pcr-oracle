@@ -199,8 +199,38 @@ supports this via its \fBstore-public-key\fP subcommand:
 This command will read the RSA private key from the PEM file,
 and write the public key as a \fBTPM2B_PUBLIC\fP object to
 the indicated output file \fBpolicy-pubkey\fP.
+.P
+Alternatively, if you want the public key to be stored as PEM formatted
+key, simply specify the file name of the public key with a \fB.pem\fP
+extension:
+.P
+.nf
+.in +2
+# pcr-oracle \\
+.br
+        --private-key policy-key.pem \\
+.br
+        --public-key policy-pubkey.pem \\
+.br
+        store-public-key
+.fi
+.P
+For details, please see section \fBRSA Key File Formats\fP.
 .\" ##################################################################
-.\" # New key format
+.\" # Supporting different key file format
+.\" ##################################################################
+.SS RSA Key File Formats
+By default, \fBpcr-oracle\fP stores private RSA keys as PEM files and
+public RSA keys in native TPM encoded format. This behavior can be tuned,
+however. When it detects a file name that has a \fB.pem\fP extension, it
+will automatically assume that the caller expects the file to be in PEM
+format.
+.P
+In addition, you can explicitly force a specific file format by
+prefixing the entire path by either \fBpem:\fP opr \fBnative:\fP,
+respectively.
+.\" ##################################################################
+.\" # New policy file format
 .\" ##################################################################
 .SS Using the TPM2.0 policy file format
 By default, \fBpcr-oracle\fP writes the policy and key files (which are
@@ -367,9 +397,11 @@ the policy will be read from this location.
 .TP
 .BI --private-key " path
 Specify the RSA secret key to be used with authorized policies.
+For notes on the file format, please see section \fBRSA Key File Formats\fP.
 .TP
 .BI --public-key " path
 Specify an RSA public key to be used with authorized policies.
+For notes on the file format, please see section \fBRSA Key File Formats\fP.
 .TP
 .BI --rsa-generate-key
 When used while creating an authorized policy, a sign or when storing
