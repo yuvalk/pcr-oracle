@@ -59,11 +59,8 @@ echo "Extend PCR 12. Unsealing should fail afterwards"
 tpm2_pcrextend 12:sha256=21d2013e3081f1e455fdd5ba6230a8620c3cfc9a9c31981d857fe3891f79449e
 rm -f recovered
 call_oracle \
-	--auth authorized.policy \
 	--input sealed \
 	--output recovered \
-	--public-key policy-pubkey \
-	--pcr-policy signed.policy \
 	unseal-secret $PCR_MASK || true
 
 if [ -s recovered ] && ! cmp secret recovered; then
