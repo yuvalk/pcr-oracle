@@ -134,6 +134,32 @@ fail:
 }
 
 /*
+ * Write a public key to a PEM file.
+ */
+bool
+tpm_rsa_key_write_public(const char *pathname, const tpm_rsa_key_t *key)
+{
+	bool ok = false;
+	FILE *fp;
+
+	if (!(fp = fopen(pathname, "w"))) {
+		error("Cannot open RSA public key file %s: %m\n", pathname);
+		goto fail;
+	}
+
+	if (!PEM_write_PUBKEY(fp, key->pkey)) {
+		error("Unable to write public key to %s\n", pathname);
+		goto fail;
+	}
+
+	ok = true;
+
+fail:
+	fclose(fp);
+	return ok;
+}
+
+/*
  * Read a private key from a PEM file.
  * Pass phrases currently not supported.
  */
