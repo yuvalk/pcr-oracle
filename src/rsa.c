@@ -355,6 +355,7 @@ tpm_rsa_key_to_tss2(const tpm_rsa_key_t *key)
 	return rsa_pubkey_alloc(n, e, key->path);
 }
 
+/* FIXME argument should be const */
 const tpm_evdigest_t *
 tpm_rsa_key_public_digest(tpm_rsa_key_t *pubkey) {
 	unsigned int der_size;
