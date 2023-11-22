@@ -97,6 +97,7 @@ enum {
 	OPT_KEY_FORMAT,
 	OPT_POLICY_NAME,
 	OPT_POLICY_FORMAT,
+	OPT_TARGET_PLATFORM,
 };
 
 static struct option options[] = {
@@ -127,6 +128,7 @@ static struct option options[] = {
 	{ "key-format",		required_argument,	0,	OPT_KEY_FORMAT },
 	{ "policy-name",	required_argument,	0,	OPT_POLICY_NAME },
 	{ "policy-format",	required_argument,	0,	OPT_POLICY_FORMAT },
+	{ "target-platform",	required_argument,	0,	OPT_TARGET_PLATFORM },
 
 	{ NULL }
 };
@@ -1017,11 +1019,10 @@ main(int argc, char **argv)
 	stored_key_t *opt_rsa_public_key = NULL;
 	bool opt_rsa_generate = false;
 	char *opt_rsa_bits = NULL;
-	char *opt_key_format = NULL;
 	char *opt_policy_name = NULL;
-	char *opt_policy_format = NULL;
-	bool tpm2key_fmt = false;
-	int systemd_json = false;
+	char *opt_target_platform = NULL;
+	const target_platform_t *target;
+	unsigned int action_flags = 0;
 	unsigned int rsa_bits = 2048;
 	int c, exit_code = 0;
 
@@ -1102,13 +1103,18 @@ main(int argc, char **argv)
 			opt_pcr_policy = optarg;
 			break;
 		case OPT_KEY_FORMAT:
-			opt_key_format = optarg;
+			warning("Detected --key-format option; please use --target-platform instead\n");
+			opt_target_platform = optarg;
 			break;
 		case OPT_POLICY_NAME:
 			opt_policy_name = optarg;
 			break;
 		case OPT_POLICY_FORMAT:
-			opt_policy_format = optarg;
+			warning("Detected --policy-format option; please use --target-platform instead\n");
+			opt_target_platform = optarg;
+			break;
+		case OPT_TARGET_PLATFORM:
+			opt_target_platform = optarg;
 			break;
 		case 'h':
 			usage(0, NULL);
@@ -1141,21 +1147,10 @@ main(int argc, char **argv)
 			fatal("Unsupported RSA bits: %s\n", opt_rsa_bits);
 	}
 
-	if (!opt_key_format || !strcasecmp(opt_key_format, "raw"))
-		tpm2key_fmt = false;
-	else
-	if (!strcasecmp(opt_key_format, "tpm2.0"))
-		tpm2key_fmt = true;
-	else
-		fatal("Unsupported key format \"%s\"\n", opt_key_format);
-
-	if (!opt_policy_format || !strcasecmp(opt_policy_format, "grub2"))
-		systemd_json = false;
-	else
-	if (!strcasecmp(opt_policy_format, "systemd"))
-		systemd_json = true;
-	else
-		fatal("Unsupported policy format \"%s\"\n", opt_policy_format);
+	if (opt_target_platform == NULL)
+		opt_target_platform = "oldgrub"; /* we should probably change this to tpm2.0 now */
+	if ((target = pcr_get_target_platform(opt_target_platform)) == NULL)
+		fatal("Unsupported target platform %s\n", opt_target_platform);
 
 	/* Validate options */
 	switch (action) {
@@ -1190,26 +1185,28 @@ main(int argc, char **argv)
 		break;
 
 	case ACTION_UNSEAL:
-		if (tpm2key_fmt) {
-			end_arguments(argc, argv);
-			break;
+		action_flags = target_platform_unseal_flags(target);
+		if (action_flags & PLATFORM_OPTIONAL_PCR_POLICY) {
+			if (opt_rsa_public_key == NULL && opt_pcr_policy)
+				usage(1, "You need to specify the --public-key option when unsealing using an authorized policy\n");
+			if (opt_pcr_policy == NULL && opt_rsa_public_key)
+				usage(1, "You need to specify the --pcr-policy option when unsealing using an authorized policy\n");
 		}
 
-		if (opt_rsa_public_key == NULL && opt_pcr_policy)
-			usage(1, "You need to specify the --public-key option when unsealing using an authorized policy\n");
-		if (opt_pcr_policy == NULL && opt_rsa_public_key)
-			usage(1, "You need to specify the --pcr-policy option when unsealing using an authorized policy\n");
-		pcr_selection = get_pcr_selection_argument(argc, argv, opt_algo);
+		if ((action_flags & PLATFORM_NEED_INPUT_FILE) && !opt_input)
+			usage(1, "You need to specify an input file via --input when unsealing a secret");
+		if ((action_flags & PLATFORM_NEED_OUTPUT_FILE) && !opt_output)
+			usage(1, "You need to specify an output file via --output when unsealing a secret");
+		if (action_flags & PLATFORM_NEED_PCR_SELECTION)
+			pcr_selection = get_pcr_selection_argument(argc, argv, opt_algo);
 		end_arguments(argc, argv);
 		break;
 
 	case ACTION_SIGN:
 		if (opt_rsa_private_key == NULL)
 			usage(1, "You need to specify the --private-key option when signing a policy\n");
-		if (systemd_json && opt_output == NULL)
-			usage(1, "You need to specify the --output option when signing a systemd policy\n");
-		if (tpm2key_fmt && opt_input == NULL)
-			usage(1, "You need to specify the --input option when signing a policy into a TPM 2.0 Key file\n");
+		if (opt_output == NULL)
+			usage(1, "You need to specify the --output option when signing a policy\n");
 
 		pcr_selection = get_pcr_selection_argument(argc, argv, opt_algo);
 		end_arguments(argc, argv);
@@ -1278,26 +1275,15 @@ main(int argc, char **argv)
 	/* When sealing a secret against an authorized policy, there's no need to
 	 * mess around with PCR values. That's the beauty of it... */
 	if (action == ACTION_SEAL && opt_authorized_policy) {
-		if (!pcr_authorized_policy_seal_secret(tpm2key_fmt, opt_authorized_policy, opt_input, opt_output))
+		if (!pcr_authorized_policy_seal_secret(target, opt_authorized_policy, opt_input, opt_output))
 			return 1;
 
 		return 0;
 	}
 
 	if (action == ACTION_UNSEAL) {
-		if (tpm2key_fmt) {
-			/* input is the sealed secret, output is the cleartext */
-			if (!pcr_policy_unseal_tpm2key (opt_input, opt_output))
-				return 1;
-		} else
-		if (opt_rsa_public_key) {
-			/* input is the sealed secret, output is the cleartext */
-			if (!pcr_authorized_policy_unseal_secret(pcr_selection, opt_pcr_policy, opt_rsa_public_key, opt_input, opt_output))
-				return 1;
-		} else {
-			if (!pcr_unseal_secret(pcr_selection, opt_input, opt_output))
-				return 1;
-		}
+		if (!pcr_unseal_secret(target, pcr_selection, opt_pcr_policy, opt_rsa_public_key, opt_input, opt_output))
+			return 1;
 
 		return 0;
 	}
@@ -1325,18 +1311,12 @@ main(int argc, char **argv)
 			predictor_report(pred);
 	} else
 	if (action == ACTION_SEAL) {
-		/* TBD - seal secret against a set of PCR values */
-		if (!pcr_seal_secret(tpm2key_fmt, &pred->prediction, opt_input, opt_output))
+		if (!pcr_seal_secret(target, &pred->prediction, opt_input, opt_output))
 			return 1;
 	} else
 	if (action == ACTION_SIGN) {
-		if (systemd_json) {
-			if (!pcr_policy_sign_systemd(&pred->prediction, opt_rsa_private_key, opt_output))
-				return 1;
-		} else {
-			if (!pcr_policy_sign(tpm2key_fmt, &pred->prediction, opt_rsa_private_key, opt_input, opt_output, opt_policy_name))
-				return 1;
-		}
+		if (!pcr_policy_sign(target, &pred->prediction, opt_rsa_private_key, opt_input, opt_output, opt_policy_name))
+			return 1;
 	}
 
 	return exit_code;

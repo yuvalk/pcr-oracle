@@ -44,4 +44,13 @@ extern bool			sdb_get_entry_list(sdb_entry_list_t *result);
 extern bool			sdb_is_kernel(const char *application);
 extern const char *		sdb_get_next_kernel(void);
 
+/* This will have to update the systemd json file, and add a new entry. */
+extern void			sdb_policy_file_add_entry(const char *filename,
+						const char *policy_name,
+						const char *algo_name,
+						unsigned int pcr_mask,
+						const void *fingerprint, unsigned int fingerprint_len,
+						const void *policy, unsigned int policy_len,
+						const void *signature, unsigned int signature_len);
+
 #endif /* SD_BOOT_H */

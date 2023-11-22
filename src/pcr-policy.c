@@ -40,6 +40,27 @@
 #include "tpm.h"
 #include "config.h"
 #include "tpm2key.h"
+#include "sd-boot.h"
+
+struct target_platform {
+	const char *    name;
+	unsigned int	unseal_flags;
+
+	bool		(*write_sealed_secret)(const char *pathname,
+					const TPML_PCR_SELECTION *pcr_sel,
+					const TPM2B_PRIVATE *sealed_private,
+					const TPM2B_PUBLIC *sealed_public);
+	bool		(*write_signed_policy)(const char *input_path, const char *output_path,
+					const char *policy_name,
+					const tpm_pcr_bank_t *bank,
+					const TPM2B_DIGEST *pcr_policy,
+					const tpm_rsa_key_t *signing_key,
+					const TPMT_SIGNATURE *signed_policy);
+	bool		(*unseal_secret)(const char *input_path, const char *output_path,
+					const tpm_pcr_selection_t *pcr_selection,
+					const char *signed_policy_path,
+					const stored_key_t *public_key_file);
+};
 
 static TPM2B_PUBLIC SRK_template = {
 	.size = sizeof(TPMT_PUBLIC),
@@ -628,7 +649,7 @@ esys_create(ESYS_CONTEXT *esys_context,
 }
 
 static bool
-esys_seal_secret(const bool tpm2key_fmt, ESYS_CONTEXT *esys_context,
+esys_seal_secret(const target_platform_t *platform, ESYS_CONTEXT *esys_context,
 		 TPM2B_DIGEST *policy, const TPML_PCR_SELECTION *pcr_sel,
 		 const char *input_path, const char *output_path)
 {
@@ -636,7 +657,6 @@ esys_seal_secret(const bool tpm2key_fmt, ESYS_CONTEXT *esys_context,
 	TPM2B_PRIVATE *sealed_private = NULL;
 	TPM2B_PUBLIC *sealed_public = NULL;
 	ESYS_TR srk_handle = ESYS_TR_NONE;
-	TSSPRIVKEY *tpm2key = NULL;
 	bool ok = false;
 
 	if (!(secret = read_secret(input_path)))
@@ -650,17 +670,7 @@ esys_seal_secret(const bool tpm2key_fmt, ESYS_CONTEXT *esys_context,
 	if (!esys_create(esys_context, srk_handle, policy, secret, &sealed_private, &sealed_public))
 		goto cleanup;
 
-	if (tpm2key_fmt) {
-		if (!tpm2key_basekey(&tpm2key, TPM2_RH_OWNER, sealed_public, sealed_private))
-			goto cleanup;
-
-		if (pcr_sel && !tpm2key_add_policy_policypcr(tpm2key, pcr_sel))
-			goto cleanup;
-
-		ok = tpm2key_write_file(output_path, tpm2key);
-	} else
-		ok = write_sealed_secret(output_path, sealed_public, sealed_private);
-
+	ok = platform->write_sealed_secret(output_path, pcr_sel, sealed_private, sealed_public);
 	if (ok)
 		infomsg("Sealed secret written to %s\n", output_path?: "(standard output)");
 
@@ -671,8 +681,6 @@ cleanup:
 		free(sealed_public);
 	if (secret)
 		free_secret(secret);
-	if (tpm2key)
-		TSSPRIVKEY_free(tpm2key);
 
 	esys_flush_context(esys_context, &srk_handle);
 	return ok;
@@ -1004,7 +1012,7 @@ pcr_store_public_key(const stored_key_t *private_key_file, const stored_key_t *p
 }
 
 bool
-pcr_seal_secret(const bool tpm2key_fmt, const tpm_pcr_bank_t *bank,
+pcr_seal_secret(const target_platform_t *platform, const tpm_pcr_bank_t *bank,
 		const char *input_path, const char *output_path)
 {
 	ESYS_CONTEXT *esys_context = tss_esys_context();
@@ -1018,15 +1026,15 @@ pcr_seal_secret(const bool tpm2key_fmt, const tpm_pcr_bank_t *bank,
 	if (!pcr_bank_to_selection(&pcr_sel, bank))
 		return false;
 
-	ok = esys_seal_secret(tpm2key_fmt, esys_context, pcr_policy, &pcr_sel,
+	ok = esys_seal_secret(platform, esys_context, pcr_policy, &pcr_sel,
 			      input_path, output_path);
 
 	free(pcr_policy);
 	return ok;
 }
 
-bool
-pcr_unseal_secret(const tpm_pcr_selection_t *pcr_selection, const char *input_path, const char *output_path)
+static bool
+pcr_unseal_secret_pcr(const tpm_pcr_selection_t *pcr_selection, const char *input_path, const char *output_path)
 {
 	ESYS_CONTEXT *esys_context = tss_esys_context();
 	tpm_pcr_bank_t pcr_current_bank;
@@ -1079,7 +1087,7 @@ pcr_authorized_policy_create(const tpm_pcr_selection_t *pcr_selection, const sto
 }
 
 bool
-pcr_authorized_policy_seal_secret(const bool tpm2key_fmt, const char *authpolicy_path,
+pcr_authorized_policy_seal_secret(const target_platform_t *platform, const char *authpolicy_path,
 				  const char *input_path, const char *output_path)
 {
 	ESYS_CONTEXT *esys_context = tss_esys_context();
@@ -1089,7 +1097,7 @@ pcr_authorized_policy_seal_secret(const bool tpm2key_fmt, const char *authpolicy
 	if (!(authorized_policy = read_digest(authpolicy_path)))
 		return false;
 
-	ok = esys_seal_secret(tpm2key_fmt, esys_context, authorized_policy, NULL,
+	ok = esys_seal_secret(platform, esys_context, authorized_policy, NULL,
 			      input_path, output_path);
 	free(authorized_policy);
 	return ok;
@@ -1146,7 +1154,7 @@ cleanup:
  * expected PCR values, and signing the resulting digest.
  */
 bool
-pcr_policy_sign(const bool tpm2key_fmt, const tpm_pcr_bank_t *bank,
+pcr_policy_sign(const target_platform_t *platform, const tpm_pcr_bank_t *bank,
 		const stored_key_t *private_key_file,
 		const char *input_path, const char *output_path, const char *policy_name)
 {
@@ -1155,23 +1163,15 @@ pcr_policy_sign(const bool tpm2key_fmt, const tpm_pcr_bank_t *bank,
 	tpm_rsa_key_t *rsa_key = NULL;
 	TPM2B_PUBLIC *pub_key = NULL;
 	TPMT_SIGNATURE *signed_policy = NULL;
-	TSSPRIVKEY *tpm2key = NULL;
-	TPML_PCR_SELECTION pcr_sel;
 	bool okay = false;
+
+	if (platform->write_signed_policy == NULL) {
+		error("Platform %s does not support signing policies yet\n", platform->name);
+		goto out;
+	}
 
 	if (!(rsa_key = stored_key_read_rsa_private(private_key_file)))
 		goto out;
-
-	if (tpm2key_fmt) {
-		if (!(pub_key = tpm_rsa_key_to_tss2(rsa_key)))
-			goto out;
-
-		if (!tpm2key_read_file(input_path, &tpm2key))
-			goto out;
-
-		if (!pcr_bank_to_selection(&pcr_sel, bank))
-			goto out;
-	}
 
 	if (!(pcr_policy = __pcr_policy_make(esys_context, bank)))
 		goto out;
@@ -1179,24 +1179,11 @@ pcr_policy_sign(const bool tpm2key_fmt, const tpm_pcr_bank_t *bank,
 	if (!__pcr_policy_sign(rsa_key, pcr_policy, &signed_policy))
 		goto out;
 
-	if (tpm2key) {
-		if (!policy_name)
-			policy_name = "default";
-
-		/* Prepend the signed policy */
-		if (!tpm2key_add_authpolicy_policyauthorize(tpm2key, policy_name,
-							    &pcr_sel, pub_key,
-							    signed_policy, false))
-			goto out;
-
-		if (!tpm2key_write_file(output_path, tpm2key))
-			goto out;
-	} else {
-		if (!write_signature(output_path, signed_policy))
-			goto out;
-	}
-	infomsg("Signed PCR policy written to %s\n", output_path?: "(standard output)");
-	okay = true;
+	okay = platform->write_signed_policy(input_path, output_path,
+			policy_name, bank, pcr_policy,
+			rsa_key, signed_policy);
+	if (okay)
+		infomsg("Signed PCR policy written to %s\n", output_path?: "(standard output)");
 
 out:
 	if (pcr_policy)
@@ -1207,8 +1194,6 @@ out:
 		free(pub_key);
 	if (rsa_key)
 		tpm_rsa_key_free(rsa_key);
-	if (tpm2key)
-		TSSPRIVKEY_free(tpm2key);
 
 	return okay;
 }
@@ -1218,7 +1203,7 @@ out:
  * should probably live in the boot loader.
  * The code is here mostly for educational/testing purposes.
  */
-bool
+static bool
 pcr_authorized_policy_unseal_secret(const tpm_pcr_selection_t *pcr_selection,
 				const char *signed_policy_path,
 				const stored_key_t *public_key_file,
@@ -1461,8 +1446,11 @@ cleanup:
 }
 
 /* Unseal the key in TPM 2.0 Key File format */
-bool
-pcr_policy_unseal_tpm2key(const char *input_path, const char *output_path)
+static bool
+tpm2key_unseal_secret(const char *input_path, const char *output_path,
+				const tpm_pcr_selection_t *pcr_selection,
+				const char *signed_policy_path,
+				const stored_key_t *public_key_file)
 {
 	ESYS_CONTEXT *esys_context = tss_esys_context();
 	TSSPRIVKEY *tpm2key = NULL;
@@ -1537,6 +1525,21 @@ cleanup:
 }
 
 bool
+pcr_unseal_secret(const target_platform_t *platform,
+				const tpm_pcr_selection_t *pcr_selection,
+				const char *signed_policy_path,
+				const stored_key_t *public_key_file,
+				const char *input_path, const char *output_path)
+{
+	if (!platform->unseal_secret) {
+		error("target platform %s does not support unsealing yet\n", platform->name);
+		return false;
+	}
+
+	return platform->unseal_secret(input_path, output_path, pcr_selection, signed_policy_path, public_key_file);
+}
+
+bool
 pcr_policy_sign_systemd(const tpm_pcr_bank_t *bank,
 			const stored_key_t *private_key_file,
 			const char *output_path)
@@ -1585,4 +1588,182 @@ out:
 
 	fclose(fp);
 	return ok;
+}
+
+/*
+ * Depending on the target platform, sealed data, authorized policies etc are
+ * written to different types of files.
+ */
+static bool
+oldgrub_write_sealed_secret(const char *pathname,
+					const TPML_PCR_SELECTION *pcr_sel,
+					const TPM2B_PRIVATE *sealed_private,
+					const TPM2B_PUBLIC *sealed_public)
+{
+	/* Just marshal public and private portions and concat them into a single file. */
+	return write_sealed_secret(pathname, sealed_public, sealed_private);
+}
+
+static bool
+oldgrub_write_signed_policy(const char *input_path, const char *output_path,
+					const char *policy_name,
+					const tpm_pcr_bank_t *bank,
+					const TPM2B_DIGEST *pcr_policy,
+					const tpm_rsa_key_t *signing_key,
+					const TPMT_SIGNATURE *signed_policy)
+{
+	/* Just write the signature, that's all */
+	return write_signature(output_path, signed_policy);
+}
+
+static bool
+oldgrub_unseal_secret(const char *input_path, const char *output_path,
+				const tpm_pcr_selection_t *pcr_selection,
+				const char *signed_policy_path,
+				const stored_key_t *public_key_file)
+{
+	if (signed_policy_path == NULL)
+		return pcr_unseal_secret_pcr(pcr_selection, input_path, output_path);
+
+	return pcr_authorized_policy_unseal_secret(pcr_selection,
+				signed_policy_path, public_key_file,
+				input_path, output_path);
+}
+
+/*
+ * This uses the TPM2.0 Key format defined in
+ * https://www.hansenpartnership.com/draft-bottomley-tpm2-keys.html
+ */
+static bool
+tpm2key_write_sealed_secret(const char *pathname,
+					const TPML_PCR_SELECTION *pcr_sel,
+					const TPM2B_PRIVATE *sealed_private,
+					const TPM2B_PUBLIC *sealed_public)
+{
+	TSSPRIVKEY *tpm2key = NULL;
+	bool ok = false;
+
+	if (!tpm2key_basekey(&tpm2key, TPM2_RH_OWNER, sealed_public, sealed_private))
+		goto cleanup;
+
+	if (pcr_sel && !tpm2key_add_policy_policypcr(tpm2key, pcr_sel))
+		goto cleanup;
+
+	ok = tpm2key_write_file(pathname, tpm2key);
+
+cleanup:
+	if (tpm2key)
+		TSSPRIVKEY_free(tpm2key);
+	return ok;
+}
+
+static bool
+tpm2key_write_signed_policy(const char *input_path, const char *output_path,
+					const char *policy_name,
+					const tpm_pcr_bank_t *bank,
+					const TPM2B_DIGEST *pcr_policy,
+					const tpm_rsa_key_t *signing_key,
+					const TPMT_SIGNATURE *signed_policy)
+{
+	TSSPRIVKEY *tpm2key = NULL;
+	TPM2B_PUBLIC *pub_key = NULL;
+	TPML_PCR_SELECTION pcr_sel;
+	bool okay = false;
+
+	if (!policy_name)
+		policy_name = "default";
+
+	/* Allow an in-place update */
+	if (input_path == NULL)
+		input_path = output_path;
+
+	if (!tpm2key_read_file(input_path, &tpm2key))
+		goto out;
+
+	if (!(pub_key = tpm_rsa_key_to_tss2(signing_key)))
+		goto out;
+
+	if (!pcr_bank_to_selection(&pcr_sel, bank))
+		goto out;
+
+	/* Prepend the signed policy */
+	if (!tpm2key_add_authpolicy_policyauthorize(tpm2key, policy_name, &pcr_sel, pub_key, signed_policy, false))
+		goto out;
+
+	okay = tpm2key_write_file(output_path, tpm2key);
+
+out:
+	if (pub_key)
+		free(pub_key);
+	if (tpm2key)
+		TSSPRIVKEY_free(tpm2key);
+
+	return okay;
+}
+
+static bool
+systemd_write_signed_policy(const char *input_path, const char *output_path,
+					const char *policy_name,
+					const tpm_pcr_bank_t *bank,
+					const TPM2B_DIGEST *pcr_policy,
+					const tpm_rsa_key_t *signing_key,
+					const TPMT_SIGNATURE *signed_policy)
+{
+	if (input_path && strcmp(input_path, output_path)) {
+		error("systemd policy will only do in-place updates of the json file\n");
+		return false;
+	}
+
+#ifdef notyet
+	sdb_policy_file_add_entry(output_path,
+			policy_name,
+			bank->algo_name,
+			bank->pcr_mask, ...);
+#endif
+	error("%s not yet implemented\n", __func__);
+	return false;
+}
+
+static target_platform_t	target_platforms[] = {
+	{
+		.name			= "oldgrub",
+		.unseal_flags		= PLATFORM_NEED_INPUT_FILE
+					| PLATFORM_NEED_OUTPUT_FILE
+					| PLATFORM_NEED_PCR_SELECTION,
+		.write_sealed_secret	= oldgrub_write_sealed_secret,
+		.write_signed_policy	= oldgrub_write_signed_policy,
+		.unseal_secret		= oldgrub_unseal_secret,
+	},
+	{
+		.name			= "tpm2.0",
+		.unseal_flags		= PLATFORM_NEED_INPUT_FILE | PLATFORM_NEED_OUTPUT_FILE,
+		.write_sealed_secret	= tpm2key_write_sealed_secret,
+		.write_signed_policy	= tpm2key_write_signed_policy,
+		.unseal_secret		= tpm2key_unseal_secret,
+	},
+	{
+		.name			= "systemd",
+		.unseal_flags		= PLATFORM_NEED_INPUT_FILE | PLATFORM_NEED_OUTPUT_FILE,
+		.write_sealed_secret	= tpm2key_write_sealed_secret,
+		.write_signed_policy	= systemd_write_signed_policy,
+	},
+	{ NULL }
+};
+
+const target_platform_t *
+pcr_get_target_platform(const char *name)
+{
+	target_platform_t *tp;
+
+	for (tp = target_platforms; tp->name; ++tp) {
+		if (!strcmp(tp->name, name))
+			return tp;
+	}
+	return NULL;
+}
+
+unsigned int
+target_platform_unseal_flags(const target_platform_t *platform)
+{
+	return platform->unseal_flags;
 }

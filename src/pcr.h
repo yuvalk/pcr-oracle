@@ -61,24 +61,36 @@ extern bool		pcr_authorized_policy_create(const tpm_pcr_selection_t *pcr_selecti
 				const char *output_path);
 extern bool		pcr_store_public_key(const stored_key_t *private_key_file,
 				const stored_key_t *public_key_file);
-extern bool		pcr_policy_sign(const bool tpm2key_fmt, const tpm_pcr_bank_t *bank,
+extern bool		pcr_policy_sign(const target_platform_t *platform, const tpm_pcr_bank_t *bank,
 				const stored_key_t *private_key_file,
 				const char *input_path,
 				const char *output_path, const char *policy_name);
 extern bool		pcr_policy_sign_systemd(const tpm_pcr_bank_t *bank,
 				const stored_key_t *private_key_file,
 				const char *output_path);
-extern bool		pcr_authorized_policy_seal_secret(const bool tpm2key_fmt,
+extern bool		pcr_authorized_policy_seal_secret(const target_platform_t *platform,
 				const char *authorized_policy, const char *input_path,
 				const char *output_path);
-extern bool		pcr_authorized_policy_unseal_secret(const tpm_pcr_selection_t *pcr_selection,
+extern bool		pcr_seal_secret(const target_platform_t *, const tpm_pcr_bank_t *bank,
+				const char *input_path, const char *output_path);
+extern bool		pcr_unseal_secret(const target_platform_t *,
+				const tpm_pcr_selection_t *pcr_selection,
 				const char *signed_policy_path,
 				const stored_key_t *public_key_file,
 				const char *input_path, const char *output_path);
-extern bool		pcr_seal_secret(const bool tpm2key_fmt, const tpm_pcr_bank_t *bank,
-				const char *input_path, const char *output_path);
-extern bool		pcr_unseal_secret(const tpm_pcr_selection_t *pcr_selection,
-				const char *input_path, const char *output_path);
 extern bool		pcr_policy_unseal_tpm2key(const char *input_path,
 				const char *output_path);
+
+extern const target_platform_t *pcr_get_target_platform(const char *name);
+
+/* Flags that indicate the set of arguments required for a specific operation */
+#define PLATFORM_NEED_INPUT_FILE	0x0001
+#define PLATFORM_NEED_OUTPUT_FILE	0x0002
+#define PLATFORM_NEED_PCR_SELECTION	0x0004
+#define PLATFORM_NEED_PUBLIC_KEY	0x0008
+#define PLATFORM_NEED_SIGNED_POLICY	0x0010
+#define PLATFORM_OPTIONAL_PCR_POLICY	0x0020
+
+extern unsigned int	target_platform_unseal_flags(const target_platform_t *);
+
 #endif /* PCR_H */
