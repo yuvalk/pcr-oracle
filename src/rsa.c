@@ -356,7 +356,8 @@ tpm_rsa_key_to_tss2(const tpm_rsa_key_t *key)
 }
 
 const tpm_evdigest_t *
-tpm_rsa_key_public_digest(tpm_rsa_key_t *pubkey) {
+tpm_rsa_key_public_digest(const tpm_rsa_key_t *pubkey)
+{
 	unsigned int der_size;
 	unsigned char *der, *bder = NULL;
 	const tpm_algo_info_t *algo;
