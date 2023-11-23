@@ -541,7 +541,7 @@ sdb_policy_file_add_entry(const char *filename, const char *policy_name, const c
 	json_object_object_add(entry, "sig",
 			json_object_new_string(print_base64_value(signature, signature_len)));
 
-	if (json_object_to_file(filename, doc)) {
+	if (json_object_to_file_ext(filename, doc, JSON_C_TO_STRING_PRETTY)) {
 		error("%s: unable to write json file: %s\n", filename, json_util_get_last_err());
 		goto out;
 	}
