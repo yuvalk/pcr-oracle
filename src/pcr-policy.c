@@ -1709,19 +1709,31 @@ systemd_write_signed_policy(const char *input_path, const char *output_path,
 					const tpm_rsa_key_t *signing_key,
 					const TPMT_SIGNATURE *signed_policy)
 {
+	const tpm_evdigest_t *digest;
+	bool okay;
+
 	if (input_path && strcmp(input_path, output_path)) {
 		error("systemd policy will only do in-place updates of the json file\n");
 		return false;
 	}
 
-#ifdef notyet
-	sdb_policy_file_add_entry(output_path,
+	if (!(digest = tpm_rsa_key_public_digest(signing_key))) {
+		error("%s: cannot compute signing key fingerprint\n", __func__);
+		return false;
+	}
+
+	okay = sdb_policy_file_add_entry(output_path,
 			policy_name,
 			bank->algo_name,
-			bank->pcr_mask, ...);
-#endif
-	error("%s not yet implemented\n", __func__);
-	return false;
+			bank->pcr_mask,
+			/* fingerprint */
+			digest->data, digest->size,
+			/* policy */
+			pcr_policy->buffer, pcr_policy->size,
+			/* signature */
+			signed_policy->signature.rsassa.sig.buffer, signed_policy->signature.rsassa.sig.size);
+
+	return okay;
 }
 
 static target_platform_t	target_platforms[] = {
