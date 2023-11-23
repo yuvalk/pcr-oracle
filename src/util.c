@@ -190,24 +190,31 @@ print_octet_string(const unsigned char *data, unsigned int len)
 }
 
 const char *
+print_hex_string_buffer(const unsigned char *data, unsigned int len, char *buffer, size_t size)
+{
+	const char *orig_buffer = buffer;
+	unsigned int i;
+
+	if (size < 2 * len + 1)
+		fatal("%s: output buffer too small\n", __func__);
+
+	for (i = 0; i < len; ++i) {
+		sprintf(buffer, "%02x", data[i]);
+		buffer += 2;
+	}
+	*buffer = '\0';
+	return orig_buffer;
+}
+
+const char *
 print_hex_string(const unsigned char *data, unsigned int len)
 {
 	static char buffer[2 * 64 + 1];
 
-	if (len <= 64) {
-		unsigned int i;
-		char *s;
+	if (len <= 64)
+		return print_hex_string_buffer(data, len, buffer, sizeof(buffer));
 
-		s = buffer;
-		for (i = 0; i < len; ++i) {
-			sprintf(s, "%02x", data[i]);
-			s += 2;
-		}
-		*s = '\0';
-	} else {
-		snprintf(buffer, sizeof(buffer), "<%u bytes of data>", len);
-	}
-
+	snprintf(buffer, sizeof(buffer), "<%u bytes of data>", len);
 	return buffer;
 }
 
