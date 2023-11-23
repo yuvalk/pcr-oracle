@@ -1,0 +1,7 @@
+##################################################################
+# libjson version
+##################################################################
+if [ -z "$uc_with_libjson" -o "$uc_with_libjson" = "detect" ]; then
+	uc_pkg_config_check_package json
+fi
+

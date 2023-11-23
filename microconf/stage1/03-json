@@ -1,0 +1,12 @@
+uc_add_option_with libjson
+uc_with_libjson=detect
+
+uc_add_help <<EOH
+
+
+  Override libjson detection
+        --with-libjson=VERSION
+        --without-libjson
+ 
+EOH
+
