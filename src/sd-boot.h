@@ -45,7 +45,7 @@ extern bool			sdb_is_kernel(const char *application);
 extern const char *		sdb_get_next_kernel(void);
 
 /* This will have to update the systemd json file, and add a new entry. */
-extern void			sdb_policy_file_add_entry(const char *filename,
+extern bool			sdb_policy_file_add_entry(const char *filename,
 						const char *policy_name,
 						const char *algo_name,
 						unsigned int pcr_mask,
