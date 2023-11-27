@@ -459,10 +459,8 @@ path_unix2dos(const char *path)
 	static char result[PATH_MAX];
 	char *s;
 
-	if (strlen(path) >= sizeof(result)) {
-		error("%s: path \"%s\" too long\n", __func__, path);
-		return NULL;
-	}
+	if (strlen(path) >= sizeof(result))
+		fatal("%s: path \"%s\" too long\n", __func__, path);
 
 	strcpy(result, path);
 	for (s = result; *s; ++s) {
