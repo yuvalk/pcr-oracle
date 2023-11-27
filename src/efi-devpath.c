@@ -144,12 +144,8 @@ __tpm_event_efi_device_path_item_file_path(const struct efi_device_path_item *it
 		strncpy(file_path, s, sizeof(file_path) - 1);
 		free(s);
 
-		for (s = file_path; *s; ++s) {
-			if (*s == '\\')
-				*s = '/';
-		}
-
-		return file_path;
+		/* convert path\name into path/name */
+		return path_dos2unix(file_path);
 	}
 
 	return NULL;
