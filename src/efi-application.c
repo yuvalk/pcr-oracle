@@ -291,8 +291,8 @@ __tpm_event_efi_bsa_rehash(const tpm_event_t *ev, const tpm_parsed_event_t *pars
 	}
 
 	/* The next boot can have a different kernel */
-	if (sdb_is_kernel(evspec->efi_application)) {
-		new_application = sdb_get_next_kernel();
+	if (sdb_is_kernel(evspec->efi_application) && ctx->next_kernel) {
+		new_application = ctx->next_kernel->image_path;
 		if (new_application) {
 			evspec_clone = *evspec;
 			evspec_clone.efi_application = strdup(new_application);

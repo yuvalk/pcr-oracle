@@ -32,7 +32,7 @@
 #include "runtime.h"
 #include "digest.h"
 #include "util.h"
-#include "sd-boot.h"
+#include "uapi.h"
 
 #define TPM_EVENT_LOG_MAX_ALGOS		64
 
@@ -789,21 +789,24 @@ __tpm_event_systemd_describe(const tpm_parsed_event_t *parsed)
 static const tpm_evdigest_t *
 __tpm_event_systemd_rehash(const tpm_event_t *ev, const tpm_parsed_event_t *parsed, tpm_event_log_rehash_ctx_t *ctx)
 {
-	sdb_entry_list_t entry_list;
+	const uapi_boot_entry_t *next_kernel = ctx->next_kernel;
 	char initrd[2048];
 	char initrd_utf16[4096];
 	unsigned int len;
 
-	memset(&entry_list, 0, sizeof(entry_list));
-	if (!sdb_get_entry_list(&entry_list)) {
-		error("Error generating the list of boot entries\n");
+	/* If no --next-kernel option was given, do not rehash anything */
+	if (next_kernel == NULL)
+		return tpm_event_get_digest(ev, ctx->algo);
+
+	if (!next_kernel->image_path) {
+		error("Unable to identify the next kernel\n");
 		return NULL;
 	}
 
-	debug("Next boot entry expected from: %s\n", entry_list.entries[0].path);
+	debug("Next boot entry expected from: %s %s\n", next_kernel->title, next_kernel->version? : "");
 	snprintf(initrd, sizeof(initrd), "initrd=%s %s",
-			path_unix2dos(entry_list.entries[0].path),
-			entry_list.entries[0].options);
+			path_unix2dos(next_kernel->initrd_path),
+			next_kernel->options? : "");
 
 	len = (strlen(initrd) + 1) << 1;
 	assert(len <= sizeof(initrd_utf16));
@@ -860,19 +863,20 @@ __tpm_event_tag_initrd_describe(const tpm_parsed_event_t *parsed)
 static const tpm_evdigest_t *
 __tpm_event_tag_initrd_rehash(const tpm_event_t *ev, const tpm_parsed_event_t *parsed, tpm_event_log_rehash_ctx_t *ctx)
 {
-	sdb_entry_list_t entry_list;
-	const tpm_evdigest_t *md = NULL;
+	const uapi_boot_entry_t *next_kernel = ctx->next_kernel;
 
-	memset(&entry_list, 0, sizeof(entry_list));
-	if (!sdb_get_entry_list(&entry_list)) {
-		error("Error generating the list of boot entries\n");
+	/* If no --next-kernel option was given, do not rehash anything */
+	if (next_kernel == NULL)
+		return tpm_event_get_digest(ev, ctx->algo);
+
+	if (!next_kernel->initrd_path) {
+		/* Can this happen eg when going from a split kernel to a unified kernel? */
+		error("Unable to identify the next initrd\n");
 		return NULL;
 	}
 
-	debug("Next boot entry expected from: %s\n", entry_list.entries[0].path);
-	md = runtime_digest_efi_file(ctx->algo, entry_list.entries[0].initrd);
-
-	return md;
+	debug("Next boot entry expected from: %s %s\n", next_kernel->title, next_kernel->version? : "");
+	return runtime_digest_efi_file(ctx->algo, next_kernel->initrd_path);
 }
 
 /*
