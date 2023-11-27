@@ -37,21 +37,8 @@ static const char *
 read_entry_token(void)
 {
 	static char id[SDB_LINE_MAX];
-	FILE *fp;
 
-	if (!(fp = fopen("/etc/kernel/entry-token", "r"))) {
-		debug("Cannot open /etc/kernel/entry-token\n");
-		goto fail;
-	}
-
-	if (fgets(id, SDB_LINE_MAX, fp))
-		id[strcspn(id, "\n")] = 0;
-
-	fclose(fp);
-	return id;
-
-fail:
-	return NULL;
+	return read_single_line_file("/etc/kernel/entry-token", id, sizeof(id));
 }
 
 static const char *
@@ -109,21 +96,8 @@ static const char *
 read_machine_id(void)
 {
 	static char id[SDB_LINE_MAX];
-	FILE *fp;
 
-	if (!(fp = fopen("/etc/machine-id", "r"))) {
-		error("Cannot open /etc/machine_id: %m\n");
-		goto fail;
-	}
-
-	if (fgets(id, SDB_LINE_MAX, fp))
-		id[strcspn(id, "\n")] = 0;
-
-	fclose(fp);
-	return id;
-
-fail:
-	return NULL;
+	return read_single_line_file("/etc/machine-id", id, sizeof(id));
 }
 
 static bool
