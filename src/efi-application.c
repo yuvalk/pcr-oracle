@@ -287,7 +287,7 @@ __tpm_event_efi_bsa_rehash(const tpm_event_t *ev, const tpm_parsed_event_t *pars
 	 */
 	if (!evspec->efi_application) {
 		debug("Unable to locate boot service application - probably not a file\n");
-		return tpm_event_get_digest(ev, ctx->algo->openssl_name);
+		return tpm_event_get_digest(ev, ctx->algo);
 	}
 
 	/* The next boot can have a different kernel */

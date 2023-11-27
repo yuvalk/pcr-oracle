@@ -670,7 +670,7 @@ predictor_update_eventlog(struct predictor *pred)
 			debug("\n");
 			__tpm_event_print(ev, debug);
 
-			if (!(old_digest = tpm_event_get_digest(ev, pred->algo)))
+			if (!(old_digest = tpm_event_get_digest(ev, pred->algo_info)))
 				fatal("Event log lacks a hash for digest algorithm %s\n", pred->algo);
 
 			if (false) {

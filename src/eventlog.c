@@ -406,13 +406,9 @@ tpm_event_type_to_string(unsigned int event_type)
 }
 
 const tpm_evdigest_t *
-tpm_event_get_digest(const tpm_event_t *ev, const char *algo_name)
+tpm_event_get_digest(const tpm_event_t *ev, const tpm_algo_info_t *algo_info)
 {
-	const tpm_algo_info_t *algo_info;
 	unsigned int i;
-
-	if ((algo_info = digest_by_name(algo_name)) < 0)
-		fatal("Unknown algo name \"%s\"\n", algo_name);
 
 	for (i = 0; i < ev->pcr_count; ++i) {
 		const tpm_evdigest_t *md = &ev->pcr_values[i];
