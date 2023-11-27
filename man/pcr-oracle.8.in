@@ -2,9 +2,9 @@
 .\" groff -man -Tascii $FILENAME
 .\"
 .\"
-.TH PCR-ORACLE "8" "@DATE@" "@PCR_ORACLE_VERSION@" "Predict TPM PCR values"
+.TH PCR-ORACLE "8" "@DATE@" "@PCR_ORACLE_VERSION@" "Predict TPM PCR values and Seal Secrets"
 .SH NAME
-pcr-oracle \- predict PCR values
+pcr-oracle \- predict TPM PCR values and seal secrets
 .SH SYNOPSIS
 .BR "pcr-oracle [\fIoptions\fP] \fIaction\fP ...
 .\" ##################################################################
@@ -24,39 +24,10 @@ In sealing mode, \fPpcr-oracle\fP will seal a given secret (such as a
 LUKS device password) to either a set of PCR values, or to an authorized
 PCR policy.
 .\" ##################################################################
-.\" # Prediction Mode
+.\" # PCR Policies vs Authorized Policies
 .\" ##################################################################
-.SS Prediction Mode
-In this mode, \fBpcr-oracle\fP is invoked like this:
-.P
-.nf
-.in +2
-# pcr-oracle --from eventlog \\
-.br
-        --before --stop-event grub-command=tpm2_key_protector_init \\
-.br
-        predict 0,2,4,7,9
-.fi
-.P
-This would create a PCR prediction for registers 0, 2, 3, 7, and 9 by
-scanning the current TPM event log until the point where grub executes
-a command called \fBtpm2_key_protector_init\fP.
-.P
-As it processes the log, it will recompute the hash values for certain events to
-match the latest changes that were made to the system. For instance, for EFI Boot
-Variable events, it will consult the \fIcurrent\fP value of a EFI variable and
-rehash it. The same holds for EFI Boot Service Application events for grub2 or
-shim; or for EFI GPT events.
-.P
-In the example above, \fBpcr-oracle\fP will print the predicted values to standard
-output. If you want to process these values with a tool from the tpm2.0-tools
-package, you may prefer binary output, which you can select by invoking the
-tool with \fB--format binary\fP.
-.\" ##################################################################
-.\" # PCR Policies
-.\" ##################################################################
-.SS PCR Policies
-The standard approach for sealing a secret against an expected system state
+.SS PCR Policies vs Authorized Policies
+The simplest approach to sealing a secret against an expected system state
 using the TPM is to create what is called a "PCR Policy". This policy essentially
 requires a given set of PCRs to contain a specific set of values. This policy can
 be used to "seal" a secret, ie encrypt it using a key only the TPM has access
@@ -68,37 +39,6 @@ expected values at this point in time, unsealing will succeed. If they
 do not contain the expected values, unsealing will either fail, or
 produce gibberish.
 .P
-In order to seal a secret againt a predicted set of PCRs, one would typically
-invoke \fBpcr-oracle\fP like this:
-.P
-.nf
-.in +2
-# pcr-oracle --from eventlog \\
-.br
-        --before --stop-event grub-command=tpm2_key_protector_init \\
-.br
-        --input secret --output sealed \\
-.br
-        seal-secret 0,2,4,7,9
-.fi
-.P
-Note that the size of the secret to be sealed must not exceed 128 bytes.
-.P
-The reverse operation looks like this:
-.P
-.nf
-.in +2
-# pcr-oracle --input sealed --output recovered \\
-        unseal-secret 0,2,4,7,9
-.fi
-.P
-This will instruct the TPM to unseal the given sealed data, computing the
-policy hash using the current values of the indicated PCRs.
-.P
-.\" ##################################################################
-.\" # Authorized Policies
-.\" ##################################################################
-.SS Using Authorized Policies
 While regular PCR policies are sound and simple, they are not very flexible, unfortunately.
 For example, transparently handling updates of the boot loader is rather
 difficult because we would first have to retrieve the secret before we're able
@@ -126,96 +66,32 @@ a LUKS password) once - and when we later update the boot loader, shim
 loader etc, we just have to authorize the new set of PCR values using the
 RSA secret key.
 .P
-So here's an example sequence of commands to use an authorized policy:
+.\" ##################################################################
+.\" # Policy file formats
+.\" ##################################################################
+.SS Policy File Formats
+To make things a little more complex, different file formats are being
+used to store policies and sealed secrets, depending on the implementation.
+The current standard is the so-called TPM2.0 key file format described in
+.BR https://www.hansenpartnership.com/draft-bottomley-tpm2-keys.html .
+This format combines key material and policies into a single, ASN.1 encoded file.
 .P
-.nf
-.in +2
-# pcr-oracle \\
-.br
-        --private-key policy-key.pem \\
-.br
-        --auth authorized.policy \\
-.br
-        create-authorized-policy 0,2,4,7,9
-.br
-# pcr-oracle \\
-.br
-        --auth authorized.policy \\
-.br
-        --input file-containing-secret \\
-.br
-        --output sealed-secret \\
-.br
-        seal-secret
-.br
-# pcr-oracle \\
-.br
-        --private-key policy-key.pem \\
-.br
-        --from eventlog \\
-.br
-        --before --stop-event grub-command=tpm2_key_protector_init \\
-.br
-        --output signed.policy \\
-.br
-        sign 0,2,4,7,9
-.br
-.fi
+In addition, file formats have been used in the past that stored TPM
+object in a native format defined in the TPM specification.
 .P
-The first of these commands creates the authorized policy and writes it
-to a file named \fPauthorized.policy\fP. This file, along with the public
-portion of the RSA key, needs to be stored somewhere in a location that
-is accessible at the time we need to unlock the LUKS key.
+Finally, the systemd-boot implementation for unlocking disk partitions
+stores policies in a JSON formatted file, which can be fed to the
+\fBsystemd-cryptenroll\fP tool. This file will contain any number of
+signed policies that we want \fBsystemd-cryptsetup\fB to recognize during
+boot time. Each entry contains the list of PCRs that compose the PCR policy, a
+finger print of the public key, the hash of the policy and the signature (in
+base64) of the PCR policy.
 .P
-The second command seals the secret against this policy. The clear text
-is stored in \fPfile-containing-secret\fP, the sealed cipher text is
-stored in \fBsealed-secret\fP. Note that the TPM is limited in the maximum
-amount of secret data it can seal; it's probably safe to assume a limit of
-128 bytes.
+\fBpcr-oracle\fP supports all three implementations. The target implementation
+can be selected using the \fB--target-platform\fP option, which accepts
+\fBtpm2.0\fP, \fBsystemd\fP and \fBoldgrub\fP as arguments, respectively.
 .P
-Finally, the third command using the prediction logic of \fBpcr-oracle\fP
-to predict a specific set of PCR values, in exactly the same way described
-in the section above on prediction mode. It then uses the given RSA key
-to sign these values and store the result in \fBsigned.policy\fP.
-.P
-Depending on the boot loader used, it may be helpful to provide the
-public portion of the RSA key in a format that is trivial to handle. For
-instance, it would be overkill to add DER parsing of RSA keys to grub.
-In a case like that, you want the key to be available in a form that
-can be fed to the TPM chip more or less directly. \fBpcr-oracle\fP
-supports this via its \fBstore-public-key\fP subcommand:
-.P
-.nf
-.in +2
-# pcr-oracle \\
-.br
-        --private-key policy-key.pem \\
-.br
-        --public-key policy-pubkey \\
-.br
-        store-public-key
-.fi
-.P
-This command will read the RSA private key from the PEM file,
-and write the public key as a \fBTPM2B_PUBLIC\fP object to
-the indicated output file \fBpolicy-pubkey\fP.
-.P
-Alternatively, if you want the public key to be stored as PEM formatted
-key, simply specify the file name of the public key with a \fB.pem\fP
-extension:
-.P
-.nf
-.in +2
-# pcr-oracle \\
-.br
-        --private-key policy-key.pem \\
-.br
-        --public-key policy-pubkey.pem \\
-.br
-        store-public-key
-.fi
-.P
-For details, please see section \fBRSA Key File Formats\fP.
+The default format is \fBtpm2.0\fP.
 .\" ##################################################################
 .\" # Supporting different key file format
 .\" ##################################################################
@@ -230,72 +106,49 @@ In addition, you can explicitly force a specific file format by
 prefixing the entire path by either \fBpem:\fP opr \fBnative:\fP,
 respectively.
 .\" ##################################################################
-.\" # New policy file format
+.\" # Commands/actions
 .\" ##################################################################
-.SS Using the TPM2.0 policy file format
-By default, \fBpcr-oracle\fP writes the policy and key files (which are
-supposed to be consumed by the boot loader) in a raw format that can be
-loaded more or less directly into the TPM.
-.P
-The upstream grub community has adopted a more versatile (and complex) file
-format, which combines key and policies into a single, ASN.1 encoded file.
-The behavior can be selected by invoking the \fBsign\fP, \fBseal-secret\fP
-and \fBunseal-secret\fP operations with the \fB--key-format=tpm2.0\fP
-option. For examples, please see the \fBEXAMPLES\fP section below.
-.P
-Optionally, \fBpcr-oracle\fP can create \fBJSON\fP files compatible
-with the \fBsystemd-cryptenroll\fP tool when signing a policy.  The
-generated document will contain a grouped list by hash algorithms
-(sha256 by default) of the different possible valid signed policies
-that the systemd-cryptsetup can recognize during boot time.  Each
-entry will contain the list of PCRs that compose the PCR policy, a
-hash of the public key, the hash of the policy and the signature (in
-base64) of the PCR policy.  This document is generated with the
-\fB--policy-format systemd\fP parameter.
+.SH ACTIONS
+The \fBpcr-oracle\fP command supports the following actions:
+.TP
+.B self-test
+Perform a TPM self-test to verify the chip exists and works.
+.TP
+.B rsa-test
+Check whether the TPM supports a given RSA key length. The desired key
+length is given using the \fB--rsa-bits\fP option.
+.TP
+.B predict
+Try to predict a specific set of PCR values.
+.TP
+.B create-authorized-policy
+Create a PCR authorized policy. Optionally, a new RSA key can be generated.
+.TP
+.B store-public-key
+Given a private key, extract the public portion and write it to a separate
+file. This is useful when a secret key has been generated while creating
+the authorized policy.
+.TP
+.B seal-secret
+Read a secret piece of data from a file, and seal it against a TPM policy
+(either a PCR policy or an authorized policy). Note that the TPM is limited
+in the maximum amount of secret data it can seal; it's probably safe to
+assume a limit of 128 bytes.
+.TP
+.B sign
+When using an authorized policy, predict a set of PCR values and sign them
+using an RSA key.
+.TP
+.B unseal-secret
+This action exists primarily for test purposes. Given a sealed secret
+and (optionally) a signed policy, unseal the secret and write it to the specified
+output file.
 .\" ##################################################################
-.\" # Test Cases
+.\" # Cookbook/examples
 .\" ##################################################################
-.SS Creating and Replaying Test Cases
-Firmwares tend to be buggy, like every piece of code, and UEFI firmwares
-are no different. In order to create a broad base of test cases to
-validate \fBpcr-oracle\fP against, it comes with support for creating
-and replaying test cases.
-.P
-A test case is mostly a dump of the data that \fBpcr-oracle\fP processes
-when re-hashing the events from the TPM event log. This includes
-the content of UEFI variables such as Boot entries, variables related
-to Secure Boot, GPT headers, full copies of any EFI Applications loaded
-during bootup (such as \fBshim.efi\fP, \fBgrub.efi\fP), and hashes
-for other files loaded by the boot loader (such as \fBgrub.cfg\fP, or
-the kernel and initrd).
-.P
-The following command will create a test case and store it in a
-directory tree at \fB/tmp/pcr-oracle.test\fP:
-.P
-.nf
-.in +2
-# pcr-oracle --from eventlog --verify current -d \\
-.br
-        --create-testcase /tmp/pcr-oracle.test \\
-.br
-        predict all
-.fi
-.P
-If you want to submit your test case, please use \fBtar\fP to archive
-the test case and create an issue in the github issue tracker at
-\fBgithub.com/okirch/pcr-oracle\fP.
-.P
-To replay a test case, you can do this:
-.P
-.nf
-.in +2
-# pcr-oracle --from eventlog --verify current -d \\
-.br
-        --replay-testcase /tmp/pcr-oracle.test \\
-.br
-        predict all
-.fi
-.P
+.SH EXAMPLES
+This section illustrates the use of \fBpcr-oracle\fP in different
+scenarios through HOWTO examples.
 .\" ##################################################################
 .\" # Self-test
 .\" ##################################################################
@@ -321,8 +174,261 @@ this:
 # pcr-oracle --rsa-bits 2048 rsa-test
 .fi
 .P
-This subcommand allows the external programs, such as fde-tools, to find
+This subcommand allows external programs, such as fde-tools, to find
 out the largest supported RSA key size.
+.\" ##################################################################
+.\" # Prediction Mode
+.\" ##################################################################
+.SS Prediction Mode
+In prediction mode, \fBpcr-oracle\fP is invoked like this:
+.P
+.nf
+.in +2
+# pcr-oracle --from eventlog \\
+        --before --stop-event grub-command=tpm2_key_protector_init \\
+        predict 0,2,4,7,9
+.fi
+.P
+This would create a PCR prediction for registers 0, 2, 3, 7, and 9 by
+scanning the current TPM event log until the point where grub executes
+a command called \fBtpm2_key_protector_init\fP.
+.P
+As it processes the log, it will recompute the hash values for certain events to
+match the latest changes that were made to the system. For instance, for EFI Boot
+Variable events, it will consult the \fIcurrent\fP value of a EFI variable and
+rehash it. The same holds for EFI Boot Service Application events for grub2 or
+shim; or for EFI GPT events.
+.P
+In the example above, \fBpcr-oracle\fP will print the predicted values to standard
+output. If you want to process these values with a tool from the tpm2.0-tools
+package, you may prefer binary output, which you can select by invoking the
+tool with \fB--format binary\fP.
+.\" ##################################################################
+.\" # PCR Policies
+.\" ##################################################################
+.SS Sealing Against PCR Policies
+In order to seal a secret againt a predicted set of PCRs, one would typically
+invoke \fBpcr-oracle\fP like this:
+.P
+.nf
+.in +2
+# pcr-oracle --from eventlog \\
+        --target-platform oldgrub \\
+        --before --stop-event grub-command=tpm2_key_protector_init \\
+        --input secret --output sealed \\
+        seal-secret 0,2,4,7,9
+.fi
+.P
+Note that the size of the secret to be sealed must not exceed 128 bytes.
+.P
+The reverse operation looks like this:
+.P
+.nf
+.in +2
+# pcr-oracle --input sealed --output recovered \\
+        --target-platform oldgrub \\
+        unseal-secret 0,2,4,7,9
+.fi
+.P
+This will instruct the TPM to unseal the given sealed data, computing the
+policy hash using the current values of the indicated PCRs.
+.P
+.\" ##################################################################
+.\" # Authorized Policies
+.\" ##################################################################
+.SS Sealing Against Authorized Policies
+The following sequence of commands seals a secret against an authorized
+policy, and then authorized a set of PCR values by signing them into a
+\fIsigned policy\fP:
+.P
+.nf
+.in +2
+# pcr-oracle \\
+        --target-platform oldgrub \\
+        --private-key policy-key.pem \\
+        --auth authorized.policy \\
+        create-authorized-policy 0,2,4,7,9
+# pcr-oracle \\
+        --target-platform oldgrub \\
+        --auth authorized.policy \\
+        --input file-containing-secret \\
+        --output sealed-secret \\
+        seal-secret
+# pcr-oracle \\
+        --target-platform oldgrub \\
+        --private-key policy-key.pem \\
+        --from eventlog \\
+        --before --stop-event grub-command=tpm2_key_protector_init \\
+        --output signed.policy \\
+        sign 0,2,4,7,9
+.fi
+.P
+The first of these commands creates the authorized policy and writes it
+to a file named \fPauthorized.policy\fP. This file, along with the public
+portion of the RSA key, needs to be stored somewhere in a location that
+is accessible at the time we need to unlock the LUKS key.
+.P
+The second command seals the secret against this policy. The clear text
+is stored in \fPfile-containing-secret\fP, the encrypted secret is
+stored in \fBsealed-secret\fP.
+.P
+Finally, the third command uses the prediction logic of \fBpcr-oracle\fP
+to predict a specific set of PCR values, in exactly the same way described
+in the section above on prediction mode. It then uses the given RSA key
+to sign these values and store the result in \fBsigned.policy\fP.
+.P
+Depending on the boot loader used, it may be helpful to provide the
+public portion of the RSA key in a format that is trivial to handle. For
+instance, it would be overkill to add DER parsing of RSA keys to grub.
+In a case like that, you want the key to be available in a form that
+can be fed to the TPM chip more or less directly. \fBpcr-oracle\fP
+supports this via its \fBstore-public-key\fP subcommand:
+.P
+.nf
+.in +2
+# pcr-oracle \\
+        --private-key policy-key.pem \\
+        --public-key policy-pubkey \\
+        store-public-key
+.fi
+.P
+This command will read the RSA private key from the PEM file,
+and write the public key as a \fBTPM2B_PUBLIC\fP object to
+the indicated output file \fBpolicy-pubkey\fP.
+.P
+Alternatively, if you want the public key to be stored as PEM formatted
+key, simply specify the file name of the public key with a \fB.pem\fP
+extension:
+.P
+.nf
+.in +2
+# pcr-oracle \\
+        --private-key policy-key.pem \\
+        --public-key policy-pubkey.pem \\
+        store-public-key
+.fi
+.P
+For details, please see section \fBRSA Key File Formats\fP.
+.\" ##################################################################
+.\" # TPM2.0 policy file format
+.\" ##################################################################
+.SS Using the TPM2.0 Policy File Format
+The following will seal a secret against PCR 0,2,4,7, and write the result
+to \fBsealed-pcr.tpm\fP using the new tpm2.0 format:
+.P
+.nf
+.in +2
+# pcr-oracle \\
+	--target-platform=tpm2.0 \\
+	--input secret \\
+	--output sealed-pcr.tpm \\
+	seal-secret 0,2,4,7
+.fi
+.P
+To seal a secret for an authorized policy:
+.P
+.nf
+.in +2
+# pcr-oracle \\
+	--target-platform=tpm2.0 \\
+	--auth authorized.policy \\
+	--input secret \\
+	--output sealed-auth.tpm \\
+	seal-secret
+.fi
+.P
+To sign the policy against PCR 0,2,4,7 for sealed-auth.tpm:
+.P
+.nf
+.in +2
+# pcr-oracle \\
+	--target-platform=tpm2.0 \\
+	--policy-name "sealing test" \\
+	--private-key policy-key.pem \\
+	--input sealed-auth.tpm \\
+	--output sealed-auth-signed.tpm \\
+	sign 0,2,4,7
+.fi
+.P
+.\" ##################################################################
+.\" # Systemd Policy
+.\" ##################################################################
+.SS Generating a Signed Policy for Systemd
+When using \fBsystemd-boot\fP instead of grub2, you would create an
+authorized policy as above, and seal your secret LUKS key against
+that. The main difference is in the way the signed policy is stored:
+.P
+.nf
+.in +2
+# pcr-oracle \\
+	--target-platform=systemd \\
+	--private-key policy-key.pem \\
+	--from eventlog \\
+	--output tpm2-pcr-signature.json \\
+	--policy-format systemd \\
+	sign 0,2,4,7,9,11
+.fi
+.P
+This will predict a set of PCR values, sign them using the specified
+private key, and then store the signature in \fBtpm2-pcr-signature.json\fP.
+Note that this command will not overwrite the JSON file, it will update
+it by adding a new entry. If there already is an entry for the predicted
+set of PCR values, this will merely update the public key fingerprint and
+signature.
+.P
+These policies can then be enrolled for future system boots using
+\fBsystemd-cryptenroll\fP:
+.P
+.nf
+.in +2
+# systemd-cryptenroll \\
+	--tpm2-device=auto \\
+	--tpm2-public-key=public-key.pem \\
+	--tpm2-public-key-pcrs="0,2,4,7,9,11" \
+	--tpm2-signature=tpm2-pcr-signature.json \\
+	--policy-format systemd \\
+	/dev/sda3
+.fi
+.\" ##################################################################
+.\" # Test Cases
+.\" ##################################################################
+.SS Creating and Replaying Test Cases
+Firmwares tend to be buggy, like every piece of code, and UEFI firmwares
+are no different. In order to create a broad base of test cases to
+validate \fBpcr-oracle\fP against, it comes with support for creating
+and replaying test cases.
+.P
+A test case is mostly a dump of the data that \fBpcr-oracle\fP processes
+when re-hashing the events from the TPM event log. This includes
+the content of UEFI variables such as Boot entries, variables related
+to Secure Boot, GPT headers, full copies of any EFI Applications loaded
+during bootup (such as \fBshim.efi\fP, \fBgrub.efi\fP), and hashes
+for other files loaded by the boot loader (such as \fBgrub.cfg\fP, or
+the kernel and initrd).
+.P
+The following command will create a test case and store it in a
+directory tree at \fB/tmp/pcr-oracle.test\fP:
+.P
+.nf
+.in +2
+# pcr-oracle --from eventlog --verify current -d \\
+        --create-testcase /tmp/pcr-oracle.test \\
+        predict all
+.fi
+.P
+If you want to submit your test case, please use \fBtar\fP to archive
+the test case and create an issue in the github issue tracker at
+\fBgithub.com/okirch/pcr-oracle\fP.
+.P
+To replay a test case, you can do this:
+.P
+.nf
+.in +2
+# pcr-oracle --from eventlog --verify current -d \\
+        --replay-testcase /tmp/pcr-oracle.test \\
+        predict all
+.fi
+.P
 .\" ##################################################################
 .\" # OPTIONS
 .\" ##################################################################
@@ -404,7 +510,7 @@ Specify an RSA public key to be used with authorized policies.
 For notes on the file format, please see section \fBRSA Key File Formats\fP.
 .TP
 .BI --rsa-generate-key
-When used while creating an authorized policy, a sign or when storing
+When used while creating an authorized policy, a signature, or when storing
 the public key, this will generate the RSA private key "on the
 fly". This should not be different from what \fBopenssl genrsa\fP
 does; the only reason this switch exists is that it may save you from
@@ -422,93 +528,16 @@ By default, the tool will read the current TPM event log. It is possible
 to process an event log generated on a different system by specifying it
 with this option.
 .TP
-.BI --key-format " fmt
-By default, the tool writes all data that is supposed to be read by the boot
-loader in a raw format that requires little or no conversion before
-being loaded into the TPM. This format can be requested explicitly by
-using \fB--key-format=raw\fP.
-.IP
-Alternatively, it can read and write a format called \fBtpm2.0\fP which
-is becoming the preferred format used by grub.
+.BI --target-platform " name
+Write key and policy information using file format(s) compatible
+with the specified target implementation. Please see the section
+\fBPolicy File Formats\fP for more information. 
 .TP
 .BI --policy-name " name
 For the tpm2.0 format, there is an extra field, Name, for the authorized
 polices. This option is only valid when sigining the sealed key in
 \fBtpm2.0\fP format. The \fBName\fP is optional and only used for display
 purposes. If the user doesn't specify a name, the default name is 'default'.
-
-.\" ##################################################################
-.\" # NOTES
-.\" ##################################################################
-.SH NOTES
-\fBpcr-oracle\fP also supports an \fBunseal\fP action for unsealing
-secrets. This is mostly for testing purposes and may change at any
-time.
-.\" ##################################################################
-.\" # EXAMPLES
-.\" ##################################################################
-.SH EXAMPLES
-The following will seal a secret against PCR 0,2,4,7, and write the result
-to \fBsealed-pcr.tpm\fP using the new tpm2.0 format:
-.P
-.nf
-.in +2
-# pcr-oracle \\
-	--key-format=tpm2.0 \\
-	--input secret \\
-	--output sealed-pcr.tpm \\
-	seal-secret 0,2,4,7
-.fi
-.P
-To seal a secret for an authorized policy:
-.P
-.nf
-.in +2
-# pcr-oracle \\
-	--key-format=tpm2.0 \\
-	--auth authorized.policy \\
-	--input secret \\
-	--output sealed-auth.tpm \\
-	seal-secret
-.fi
-.P
-To sign the policy against PCR 0,2,4,7 for sealed-auth.tpm:
-.P
-.nf
-.in +2
-# pcr-oracle \\
-	--key-format=tpm2.0 \\
-	--policy-name "sealing test" \\
-	--private-key policy-key.pem \\
-	--input sealed-auth.tpm \\
-	--output sealed-auth-signed.tpm \\
-	sign 0,2,4,7
-.fi
-.P
-To generate a signed policy compatible with systemd:
-.P
-.nf
-.in +2
-# pcr-oracle \\
-	--private-key policy-key.pem \\
-	--from eventlog \\
-	--output tpm2-pcr-signature.json \\
-	--policy-format systemd \\
-	sign 0,2,4,7
-.fi
-.P
-This can be registered with:
-.P
-.nf
-.in +2
-# systemd-cryptenroll \\
-	--tpm2-device=auto \\
-	--tpm2-public-key=public-key.pem \\
-	--tpm2-public-key-pcrs="0,2,4,7" \
-	--tpm2-signature=tpm2-pcr-signature.json \\
-	--policy-format systemd \\
-	/dev/sda3
-.fi
 .\" ##################################################################
 .\" # SEE ALSO
 .\" ##################################################################
@@ -517,4 +546,5 @@ This can be registered with:
 .BR tpm2_policyauthorize (1),
 .BR tpm2_create (1).
 .SH AUTHOR
-\fBpcr-oracle\fP was written by Olaf Kirch.
+\fBpcr-oracle\fP was written by Olaf Kirch with significant contributions
+from Gary Lin, Michael Chang and Alberto Planas.
