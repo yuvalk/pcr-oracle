@@ -34,6 +34,7 @@
 #include "rsa.h"
 #include "store.h"
 #include "testcase.h"
+#include "sd-boot.h"
 
 enum {
 	ACTION_NONE,
@@ -58,6 +59,7 @@ struct predictor {
 	const char *		initial_source;
 
 	const char *		tpm_event_log_path;
+	const char *		next_kernel_id;
 
 	const char *		algo;
 	const tpm_algo_info_t *	algo_info;
@@ -98,6 +100,7 @@ enum {
 	OPT_POLICY_NAME,
 	OPT_POLICY_FORMAT,
 	OPT_TARGET_PLATFORM,
+	OPT_NEXT_KERNEL,
 };
 
 static struct option options[] = {
@@ -114,6 +117,7 @@ static struct option options[] = {
 	{ "before",		no_argument,		0,	OPT_BEFORE },
 	{ "verify",		required_argument,	0,	OPT_VERIFY },
 	{ "use-pesign",		no_argument,		0,	OPT_USE_PESIGN },
+	{ "next-kernel",	required_argument,	0,	OPT_NEXT_KERNEL },
 	{ "create-testcase",	required_argument,	0,	OPT_CREATE_TESTCASE },
 	{ "replay-testcase",	required_argument,	0,	OPT_REPLAY_TESTCASE },
 
@@ -129,6 +133,7 @@ static struct option options[] = {
 	{ "policy-name",	required_argument,	0,	OPT_POLICY_NAME },
 	{ "policy-format",	required_argument,	0,	OPT_POLICY_FORMAT },
 	{ "target-platform",	required_argument,	0,	OPT_TARGET_PLATFORM },
+	{ "next-kernel",	required_argument,	0,	OPT_NEXT_KERNEL },
 
 	{ NULL }
 };
@@ -250,7 +255,8 @@ predictor_load_eventlog(struct predictor *pred)
 static struct predictor *
 predictor_new(const tpm_pcr_selection_t *pcr_selection, const char *source,
 		const char *tpm_eventlog_path,
-		const char *output_format)
+		const char *output_format,
+		const char *next_kernel_id)
 {
 	struct predictor *pred;
 
@@ -260,6 +266,7 @@ predictor_new(const tpm_pcr_selection_t *pcr_selection, const char *source,
 	pred = calloc(1, sizeof(*pred));
 	pred->pcr_mask = pcr_selection->pcr_mask;
 	pred->initial_source = source;
+	pred->next_kernel_id = next_kernel_id;
 
 	pred->algo = pcr_selection->algo_info->openssl_name;
 	pred->algo_info = pcr_selection->algo_info;
@@ -651,6 +658,14 @@ predictor_update_eventlog(struct predictor *pred)
 	tpm_event_log_rehash_ctx_init(&rehash_ctx, pred->algo_info);
 	rehash_ctx.use_pesign = opt_use_pesign;
 
+	/* The argument given to --next-kernel will be either "auto" or the
+	 * systemd ID of the next kernel entry to be booted.
+	 * FIXME: we should probably hide this behind a target_platform function.
+	 */
+	if (pred->next_kernel_id != NULL
+	 && !(rehash_ctx.next_kernel = sdb_identify_next_kernel(pred->next_kernel_id)))
+		fatal("unable to identify next kernel \"%s\"\n", pred->next_kernel_id);
+
 	for (ev = pred->event_log; ev; ev = ev->next) {
 		tpm_evdigest_t *pcr;
 		bool stop = false;
@@ -1021,6 +1036,7 @@ main(int argc, char **argv)
 	char *opt_rsa_bits = NULL;
 	char *opt_policy_name = NULL;
 	char *opt_target_platform = NULL;
+	char *opt_next_kernel = NULL;
 	const target_platform_t *target;
 	unsigned int action_flags = 0;
 	unsigned int rsa_bits = 2048;
@@ -1054,6 +1070,9 @@ main(int argc, char **argv)
 			break;
 		case OPT_USE_PESIGN:
 			opt_use_pesign = 1;
+			break;
+		case OPT_NEXT_KERNEL:
+			opt_next_kernel = optarg;
 			break;
 		case OPT_STOP_EVENT:
 			opt_stop_event = optarg;
@@ -1296,7 +1315,7 @@ main(int argc, char **argv)
 		fatal("BUG: action %u should have parsed a PCR selection argument", action);
 
 	pred = predictor_new(pcr_selection, opt_from, opt_eventlog_path,
-			opt_output_format);
+			opt_output_format, opt_next_kernel);
 
 	if (opt_stop_event)
 		predictor_set_stop_event(pred, opt_stop_event, !opt_stop_before);

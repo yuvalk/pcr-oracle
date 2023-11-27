@@ -495,6 +495,18 @@ events (tracked in PCR9). In this case, it would be totally sufficient
 to stop processing after grub loaded \fPgrub.cfg\fP from the EFI
 System Partition.
 .TP
+.BI --next-kernel " id
+In a systemd-boot environment, the values of PCR registers also depend on
+the contents of the kernel and initrd image, as well as the kernel command line
+options. After a kernel update or an initrd rebuild, these values will change.
+So when predicting PCR values in this case, \fBpcr-oracle\fP needs to be
+instructed to refer to the future kernel rather than the current one.
+.IP
+This is what the \fB--next-kernel\fP option is for. It takes one argument, which
+is either an ID (in the sense of systemd-boot IDs), or \fBauto\fP. When
+the latter is given, \fBpcr-oracle\fP will make a best guess as to what
+kernel image will be used on next boot.
+.TP
 .BI --authorized-policy " path
 Specify the location of the authorized policy. In conjunction with
 the \fBcreate-authorized-policy\fP action, the newly created policy

@@ -388,6 +388,25 @@ fail:
 }
 
 /*
+ * Identify the next kernel and initrd given an ID
+ */
+uapi_boot_entry_t *
+sdb_identify_next_kernel(const char *id)
+{
+	const char *machine_id;
+
+	if (id == NULL || !strcasecmp(id, "default")) {
+		if (!(id = get_token_id()))
+			return NULL;
+	}
+
+	if (!(machine_id = read_machine_id()))
+		return NULL;
+
+	return uapi_find_boot_entry(id, machine_id);
+}
+
+/*
  * Update the systemd json file
  */
 static inline bool

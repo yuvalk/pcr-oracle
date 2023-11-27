@@ -200,6 +200,9 @@ typedef struct tpm_event_log_rehash_ctx {
 	bool			use_pesign;		/* compute authenticode FP using external pesign application */
 
 	const pecoff_image_info_t *next_stage_img;
+
+	/* This get set when the user specifies --next-kernel */
+	uapi_boot_entry_t *	next_kernel;
 } tpm_event_log_rehash_ctx_t;
 
 #define GRUB_COMMAND_ARGV_MAX	32

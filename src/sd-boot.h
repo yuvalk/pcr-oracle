@@ -21,6 +21,8 @@
 #define SD_BOOT_H
 
 #include <limits.h>
+#include "uapi.h"
+#include "types.h"
 
 #define SDB_MAX_ENTRIES 16
 #define SDB_LINE_MAX 512
@@ -40,6 +42,7 @@ typedef struct sdb_entry_list {
 	sdb_entry_data_t	entries[SDB_MAX_ENTRIES];
 } sdb_entry_list_t;
 
+extern uapi_boot_entry_t *	sdb_identify_next_kernel(const char *id);
 extern bool			sdb_get_entry_list(sdb_entry_list_t *result);
 extern bool			sdb_is_kernel(const char *application);
 extern const char *		sdb_get_next_kernel(void);
