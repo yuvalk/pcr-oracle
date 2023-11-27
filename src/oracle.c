@@ -1148,7 +1148,7 @@ main(int argc, char **argv)
 	}
 
 	if (opt_target_platform == NULL)
-		opt_target_platform = "oldgrub"; /* we should probably change this to tpm2.0 now */
+		opt_target_platform = "tpm2.0";
 	if ((target = pcr_get_target_platform(opt_target_platform)) == NULL)
 		fatal("Unsupported target platform %s\n", opt_target_platform);
 
