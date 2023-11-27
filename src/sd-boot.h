@@ -43,9 +43,7 @@ typedef struct sdb_entry_list {
 } sdb_entry_list_t;
 
 extern uapi_boot_entry_t *	sdb_identify_next_kernel(const char *id);
-extern bool			sdb_get_entry_list(sdb_entry_list_t *result);
 extern bool			sdb_is_kernel(const char *application);
-extern const char *		sdb_get_next_kernel(void);
 
 /* This will have to update the systemd json file, and add a new entry. */
 extern bool			sdb_policy_file_add_entry(const char *filename,
