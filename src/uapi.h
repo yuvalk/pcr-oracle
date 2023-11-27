@@ -18,25 +18,26 @@
  * Written by Olaf Kirch <okir@suse.com>
  */
 
-#ifndef TYPES_H
-#define TYPES_H
+#ifndef UAPI_H
+#define UAPI_H
 
-#include <stdbool.h>
-#include <stdint.h>
+#include "types.h"
 
-typedef struct buffer		buffer_t;
-typedef struct tpm_evdigest	tpm_evdigest_t;
-typedef struct tpm_algo_info	tpm_algo_info_t;
-typedef struct digest_ctx	digest_ctx_t;
-typedef struct win_cert		win_cert_t;
-typedef struct cert_table	cert_table_t;
-typedef struct parsed_cert	parsed_cert_t;
-typedef struct pecoff_image_info pecoff_image_info_t;
-typedef struct testcase		testcase_t;
-typedef struct stored_key	stored_key_t;
-typedef struct target_platform	target_platform_t;
-typedef struct uapi_boot_entry	uapi_boot_entry_t;
+struct uapi_boot_entry {
+	char *		title;
+	bool		efi;
+	char *		sort_key;
+	char *		version;
+	char *		machine_id;
+	char *		architecture;
+	char *		image_path;
+	char *		initrd_path;
+	char *		options;
+};
 
-#endif /* TYPES_H */
+#define UAPI_BOOT_DIRECTORY	"/boot/efi/loader/entries"
 
+extern uapi_boot_entry_t *	uapi_find_boot_entry(const char *id, const char *machine_id);
+extern void			uapi_boot_entry_free(uapi_boot_entry_t *);
 
+#endif /* UAPI_H */
