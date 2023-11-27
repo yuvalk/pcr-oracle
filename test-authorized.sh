@@ -15,7 +15,7 @@ function call_oracle {
 
 	echo "****************"
 	echo "pcr-oracle $*"
-	$pcr_oracle -d "$@"
+	$pcr_oracle --target-platform oldgrub -d "$@"
 }
 
 if [ -z "$TESTDIR" ]; then

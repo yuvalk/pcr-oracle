@@ -15,7 +15,7 @@ function call_oracle {
 
 	echo "****************"
 	echo "pcr-oracle $*"
-	$pcr_oracle -d "$@"
+	$pcr_oracle --target-platform tpm2.0 -d "$@"
 }
 
 if [ -z "$TESTDIR" ]; then
@@ -34,7 +34,6 @@ cd $TESTDIR
 
 echo "Seal the secret with PCR policy"
 call_oracle \
-	--key-format tpm2.0 \
 	--from current \
 	--input secret \
 	--output sealed \
@@ -42,7 +41,6 @@ call_oracle \
 
 echo "Unseal the sealed with PCR policy"
 call_oracle \
-	--key-format tpm2.0 \
 	--input sealed \
 	--output recovered \
 	unseal-secret
@@ -72,7 +70,6 @@ call_oracle \
 	store-public-key
 
 call_oracle \
-	--key-format tpm2.0 \
 	--auth authorized.policy \
 	--input secret \
 	--output sealed \
@@ -81,7 +78,6 @@ call_oracle \
 for attempt in first second; do
 	echo "Sign the set of PCRs we want to authorize"
 	call_oracle \
-		--key-format tpm2.0 \
 		--policy-name "authorized-policy-test" \
 		--private-key policy-key.pem \
 		--from current \
@@ -91,7 +87,6 @@ for attempt in first second; do
 
 	echo "$attempt attempt to unseal the secret"
 	call_oracle \
-		--key-format tpm2.0 \
 		--input sealed-signed \
 		--output recovered \
 		unseal-secret
@@ -115,7 +110,6 @@ for attempt in first second; do
 	tpm2_pcrextend 12:sha256=21d2013e3081f1e455fdd5ba6230a8620c3cfc9a9c31981d857fe3891f79449e
 	rm -f recovered
 	call_oracle \
-		--key-format tpm2.0 \
 		--input sealed-signed \
 		--output recovered \
 		unseal-secret || true
