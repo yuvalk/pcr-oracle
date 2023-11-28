@@ -59,7 +59,7 @@ struct predictor {
 	const char *		initial_source;
 
 	const char *		tpm_event_log_path;
-	const char *		next_kernel_id;
+	const char *		boot_entry_id;
 
 	const char *		algo;
 	const tpm_algo_info_t *	algo_info;
@@ -100,7 +100,7 @@ enum {
 	OPT_POLICY_NAME,
 	OPT_POLICY_FORMAT,
 	OPT_TARGET_PLATFORM,
-	OPT_NEXT_KERNEL,
+	OPT_BOOT_ENTRY,
 };
 
 static struct option options[] = {
@@ -117,7 +117,7 @@ static struct option options[] = {
 	{ "before",		no_argument,		0,	OPT_BEFORE },
 	{ "verify",		required_argument,	0,	OPT_VERIFY },
 	{ "use-pesign",		no_argument,		0,	OPT_USE_PESIGN },
-	{ "next-kernel",	required_argument,	0,	OPT_NEXT_KERNEL },
+	{ "boot-entry",		required_argument,	0,	OPT_BOOT_ENTRY },
 	{ "create-testcase",	required_argument,	0,	OPT_CREATE_TESTCASE },
 	{ "replay-testcase",	required_argument,	0,	OPT_REPLAY_TESTCASE },
 
@@ -133,7 +133,7 @@ static struct option options[] = {
 	{ "policy-name",	required_argument,	0,	OPT_POLICY_NAME },
 	{ "policy-format",	required_argument,	0,	OPT_POLICY_FORMAT },
 	{ "target-platform",	required_argument,	0,	OPT_TARGET_PLATFORM },
-	{ "next-kernel",	required_argument,	0,	OPT_NEXT_KERNEL },
+	{ "next-kernel",	required_argument,	0,	OPT_BOOT_ENTRY },
 
 	{ NULL }
 };
@@ -256,7 +256,7 @@ static struct predictor *
 predictor_new(const tpm_pcr_selection_t *pcr_selection, const char *source,
 		const char *tpm_eventlog_path,
 		const char *output_format,
-		const char *next_kernel_id)
+		const char *boot_entry_id)
 {
 	struct predictor *pred;
 
@@ -266,7 +266,7 @@ predictor_new(const tpm_pcr_selection_t *pcr_selection, const char *source,
 	pred = calloc(1, sizeof(*pred));
 	pred->pcr_mask = pcr_selection->pcr_mask;
 	pred->initial_source = source;
-	pred->next_kernel_id = next_kernel_id;
+	pred->boot_entry_id = boot_entry_id;
 
 	pred->algo = pcr_selection->algo_info->openssl_name;
 	pred->algo_info = pcr_selection->algo_info;
@@ -662,9 +662,9 @@ predictor_update_eventlog(struct predictor *pred)
 	 * systemd ID of the next kernel entry to be booted.
 	 * FIXME: we should probably hide this behind a target_platform function.
 	 */
-	if (pred->next_kernel_id != NULL
-	 && !(rehash_ctx.next_kernel = sdb_identify_next_kernel(pred->next_kernel_id)))
-		fatal("unable to identify next kernel \"%s\"\n", pred->next_kernel_id);
+	if (pred->boot_entry_id != NULL
+	 && !(rehash_ctx.boot_entry = sdb_identify_boot_entry(pred->boot_entry_id)))
+		fatal("unable to identify next kernel \"%s\"\n", pred->boot_entry_id);
 
 	for (ev = pred->event_log; ev; ev = ev->next) {
 		tpm_evdigest_t *pcr;
@@ -1036,7 +1036,7 @@ main(int argc, char **argv)
 	char *opt_rsa_bits = NULL;
 	char *opt_policy_name = NULL;
 	char *opt_target_platform = NULL;
-	char *opt_next_kernel = NULL;
+	char *opt_boot_entry = NULL;
 	const target_platform_t *target;
 	unsigned int action_flags = 0;
 	unsigned int rsa_bits = 2048;
@@ -1071,8 +1071,8 @@ main(int argc, char **argv)
 		case OPT_USE_PESIGN:
 			opt_use_pesign = 1;
 			break;
-		case OPT_NEXT_KERNEL:
-			opt_next_kernel = optarg;
+		case OPT_BOOT_ENTRY:
+			opt_boot_entry = optarg;
 			break;
 		case OPT_STOP_EVENT:
 			opt_stop_event = optarg;
@@ -1315,7 +1315,7 @@ main(int argc, char **argv)
 		fatal("BUG: action %u should have parsed a PCR selection argument", action);
 
 	pred = predictor_new(pcr_selection, opt_from, opt_eventlog_path,
-			opt_output_format, opt_next_kernel);
+			opt_output_format, opt_boot_entry);
 
 	if (opt_stop_event)
 		predictor_set_stop_event(pred, opt_stop_event, !opt_stop_before);

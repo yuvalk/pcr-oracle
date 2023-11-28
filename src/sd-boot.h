@@ -42,7 +42,7 @@ typedef struct sdb_entry_list {
 	sdb_entry_data_t	entries[SDB_MAX_ENTRIES];
 } sdb_entry_list_t;
 
-extern uapi_boot_entry_t *	sdb_identify_next_kernel(const char *id);
+extern uapi_boot_entry_t *	sdb_identify_boot_entry(const char *id);
 extern bool			sdb_is_kernel(const char *application);
 
 /* This will have to update the systemd json file, and add a new entry. */

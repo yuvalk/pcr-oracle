@@ -789,24 +789,24 @@ __tpm_event_systemd_describe(const tpm_parsed_event_t *parsed)
 static const tpm_evdigest_t *
 __tpm_event_systemd_rehash(const tpm_event_t *ev, const tpm_parsed_event_t *parsed, tpm_event_log_rehash_ctx_t *ctx)
 {
-	const uapi_boot_entry_t *next_kernel = ctx->next_kernel;
+	const uapi_boot_entry_t *boot_entry = ctx->boot_entry;
 	char initrd[2048];
 	char initrd_utf16[4096];
 	unsigned int len;
 
 	/* If no --next-kernel option was given, do not rehash anything */
-	if (next_kernel == NULL)
+	if (boot_entry == NULL)
 		return tpm_event_get_digest(ev, ctx->algo);
 
-	if (!next_kernel->image_path) {
+	if (!boot_entry->image_path) {
 		error("Unable to identify the next kernel\n");
 		return NULL;
 	}
 
-	debug("Next boot entry expected from: %s %s\n", next_kernel->title, next_kernel->version? : "");
+	debug("Next boot entry expected from: %s %s\n", boot_entry->title, boot_entry->version? : "");
 	snprintf(initrd, sizeof(initrd), "initrd=%s %s",
-			path_unix2dos(next_kernel->initrd_path),
-			next_kernel->options? : "");
+			path_unix2dos(boot_entry->initrd_path),
+			boot_entry->options? : "");
 
 	len = (strlen(initrd) + 1) << 1;
 	assert(len <= sizeof(initrd_utf16));
@@ -863,20 +863,20 @@ __tpm_event_tag_initrd_describe(const tpm_parsed_event_t *parsed)
 static const tpm_evdigest_t *
 __tpm_event_tag_initrd_rehash(const tpm_event_t *ev, const tpm_parsed_event_t *parsed, tpm_event_log_rehash_ctx_t *ctx)
 {
-	const uapi_boot_entry_t *next_kernel = ctx->next_kernel;
+	const uapi_boot_entry_t *boot_entry = ctx->boot_entry;
 
 	/* If no --next-kernel option was given, do not rehash anything */
-	if (next_kernel == NULL)
+	if (boot_entry == NULL)
 		return tpm_event_get_digest(ev, ctx->algo);
 
-	if (!next_kernel->initrd_path) {
+	if (!boot_entry->initrd_path) {
 		/* Can this happen eg when going from a split kernel to a unified kernel? */
 		error("Unable to identify the next initrd\n");
 		return NULL;
 	}
 
-	debug("Next boot entry expected from: %s %s\n", next_kernel->title, next_kernel->version? : "");
-	return runtime_digest_efi_file(ctx->algo, next_kernel->initrd_path);
+	debug("Next boot entry expected from: %s %s\n", boot_entry->title, boot_entry->version? : "");
+	return runtime_digest_efi_file(ctx->algo, boot_entry->initrd_path);
 }
 
 /*

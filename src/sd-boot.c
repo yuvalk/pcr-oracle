@@ -161,7 +161,7 @@ sdb_is_kernel(const char *application)
  * Identify the next kernel and initrd given an ID
  */
 uapi_boot_entry_t *
-sdb_identify_next_kernel(const char *id)
+sdb_identify_boot_entry(const char *id)
 {
 	uapi_kernel_entry_tokens_t id_match = { 0 };
 	const uapi_kernel_entry_tokens_t *match;
