@@ -32,7 +32,6 @@
 #include "sd-boot.h"
 #include "util.h"
 
-
 static const char *
 read_entry_token(void)
 {
@@ -100,6 +99,34 @@ read_machine_id(void)
 	return read_single_line_file("/etc/machine-id", id, sizeof(id));
 }
 
+/*
+ * Kernels installed by kernel-install can use a variety of IDs as entry-token.
+ * Try to cater to all of them.
+ */
+static const uapi_kernel_entry_tokens_t *
+get_valid_kernel_entry_tokens(void)
+{
+	static uapi_kernel_entry_tokens_t valid_tokens;
+	const char *token;
+
+	if (valid_tokens.count != 0)
+		return &valid_tokens; /* I've been here before */
+
+	if ((token = read_entry_token()) != NULL)
+		uapi_kernel_entry_tokens_add(&valid_tokens, token);
+
+	if ((token = read_machine_id()) != NULL)
+		uapi_kernel_entry_tokens_add(&valid_tokens, token);
+
+	if ((token = read_os_release("ID")) != NULL)
+		uapi_kernel_entry_tokens_add(&valid_tokens, token);
+
+	if ((token = read_os_release("IMAGE_ID")) != NULL)
+		uapi_kernel_entry_tokens_add(&valid_tokens, token);
+
+	return &valid_tokens;
+}
+
 static bool
 exists_efi_dir(const char *path)
 {
@@ -151,24 +178,28 @@ get_token_id(void)
 bool
 sdb_is_kernel(const char *application)
 {
-	const char *token_id;
-	const char *prefix = "linux-";
-	char path[PATH_MAX];
+	static const char prefix[] = "linux-";
+	const uapi_kernel_entry_tokens_t *match;
+	char *path_copy;
+	int found = 0;
 
-	if (!(token_id = get_token_id()))
-		goto fail;
+	match = get_valid_kernel_entry_tokens();
+	path_copy = strdup(application);
 
-	snprintf(path, PATH_MAX, "/%s/", token_id);
-	if (strncmp(path, application, strlen(path)))
-		goto fail;
+	for (char *ptr = strtok(path_copy, "/"); ptr; ptr = strtok(NULL, "/")) {
+		unsigned int i;
+		for (i = 0; i < match->count; ++i) {
+			const char *token = match->entry_token[i];
 
-	strncpy(path, application, PATH_MAX);
-	for (char *ptr = strtok(path, "/"); ptr; ptr = strtok(NULL, "/"))
-		if (!strncmp(ptr, prefix, strlen(prefix)))
-			return true;
+			if (!strcmp(ptr, token))
+				found |= 1;
+			else if (!strncmp(ptr, prefix, sizeof(prefix) - 1))
+				found |= 2;
+		}
+	}
 
-fail:
-	return false;
+	free(path_copy);
+	return (found == 3);
 }
 
 /*
@@ -177,17 +208,25 @@ fail:
 uapi_boot_entry_t *
 sdb_identify_next_kernel(const char *id)
 {
+	uapi_kernel_entry_tokens_t id_match = { 0 };
+	const uapi_kernel_entry_tokens_t *match;
 	const char *machine_id;
+	uapi_boot_entry_t *result = NULL;
 
-	if (id == NULL || !strcasecmp(id, "default")) {
-		if (!(id = get_token_id()))
-			return NULL;
+	if (id == NULL || !strcasecmp(id, "auto")) {
+		match = get_valid_kernel_entry_tokens();
+	} else {
+		uapi_kernel_entry_tokens_add(&id_match, id);
+		match = &id_match;
 	}
 
-	if (!(machine_id = read_machine_id()))
-		return NULL;
+	machine_id = read_machine_id();
 
-	return uapi_find_boot_entry(id, machine_id);
+	if (machine_id != NULL)
+		result = uapi_find_boot_entry(match, machine_id);
+
+	uapi_kernel_entry_tokens_destroy(&id_match);
+	return result;
 }
 
 /*

@@ -149,11 +149,10 @@ uapi_boot_entry_more_recent(const uapi_boot_entry_t *entry_a, const uapi_boot_en
  */
 uapi_boot_entry_t *
 uapi_find_matching_boot_entry(const char *dir_path,
-		const char *entry_id, const char *machine_id, const char *architecture,
+		const uapi_kernel_entry_tokens_t *match, const char *machine_id, const char *architecture,
 		uapi_boot_entry_t **best_ret)
 {
 	uapi_boot_entry_t *best = *best_ret;
-	unsigned int entry_id_len = 0;
 	struct dirent *d;
 	DIR *dir;
 
@@ -163,9 +162,6 @@ uapi_find_matching_boot_entry(const char *dir_path,
 		return NULL;
 	}
 
-	if (entry_id)
-		entry_id_len = strlen(entry_id);
-
 	while ((d = readdir(dir)) != NULL) {
 		char config_path[PATH_MAX];
 		uapi_boot_entry_t *entry;
@@ -173,7 +169,7 @@ uapi_find_matching_boot_entry(const char *dir_path,
 		if (d->d_type != DT_REG)
 			continue;
 
-		if (entry_id && strncmp(d->d_name, entry_id, entry_id_len))
+		if (match && !uapi_kernel_entry_tokens_match_filename(match, d->d_name))
 			continue;
 
 		snprintf(config_path, sizeof(config_path), "%s/%s", dir_path, d->d_name);
@@ -201,7 +197,7 @@ uapi_find_matching_boot_entry(const char *dir_path,
 }
 
 uapi_boot_entry_t *
-uapi_find_boot_entry(const char *id, const char *machine_id)
+uapi_find_boot_entry(const uapi_kernel_entry_tokens_t *match, const char *machine_id)
 {
 	uapi_boot_entry_t *best = NULL;
 	struct utsname uts;
@@ -211,7 +207,7 @@ uapi_find_boot_entry(const char *id, const char *machine_id)
 		architecture = uts.machine;
 
 	return uapi_find_matching_boot_entry(UAPI_BOOT_DIRECTORY,
-			id, machine_id, architecture,
+			match, machine_id, architecture,
 			&best);
 }
 
@@ -225,6 +221,44 @@ uapi_boot_entry_free(uapi_boot_entry_t *ube)
 	drop_string(&ube->initrd_path);
 	drop_string(&ube->options);
 	free(ube);
+}
+
+/*
+ * Manage list of valid entry-tokens
+ */
+void
+uapi_kernel_entry_tokens_add(uapi_kernel_entry_tokens_t *match, const char *id)
+{
+	if (id == NULL)
+		return;
+
+	if (match->count >= UAPI_MAX_ENTRY_TOKENS)
+		fatal("%s: too many tokens\n", __func__);
+
+	match->entry_token[match->count++] = strdup(id);
+}
+
+void
+uapi_kernel_entry_tokens_destroy(uapi_kernel_entry_tokens_t *match)
+{
+	while (match->count)
+		drop_string(&match->entry_token[--(match->count)]);
+}
+
+bool
+uapi_kernel_entry_tokens_match_filename(const uapi_kernel_entry_tokens_t *token_list, const char *filename)
+{
+	unsigned int i;
+
+	for (i = 0; i < token_list->count; ++i) {
+		const char *token = token_list->entry_token[i];
+		int len = strlen(token);
+
+		if (!strncmp(filename, token, len) && filename[len] == '-')
+			return true;
+	}
+
+	return false;
 }
 
 /*

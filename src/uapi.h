@@ -35,9 +35,18 @@ struct uapi_boot_entry {
 	char *		options;
 };
 
+#define UAPI_MAX_ENTRY_TOKENS	8
+typedef struct uapi_kernel_entry_tokens {
+	unsigned int	count;
+	char *		entry_token[UAPI_MAX_ENTRY_TOKENS];
+} uapi_kernel_entry_tokens_t;
+
 #define UAPI_BOOT_DIRECTORY	"/boot/efi/loader/entries"
 
-extern uapi_boot_entry_t *	uapi_find_boot_entry(const char *id, const char *machine_id);
+extern uapi_boot_entry_t *	uapi_find_boot_entry(const uapi_kernel_entry_tokens_t *match, const char *machine_id);
 extern void			uapi_boot_entry_free(uapi_boot_entry_t *);
+extern void			uapi_kernel_entry_tokens_add(uapi_kernel_entry_tokens_t *, const char *);
+extern void			uapi_kernel_entry_tokens_destroy(uapi_kernel_entry_tokens_t *);
+extern bool			uapi_kernel_entry_tokens_match_filename(const uapi_kernel_entry_tokens_t *, const char *filename);
 
 #endif /* UAPI_H */
