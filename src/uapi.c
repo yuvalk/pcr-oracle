@@ -123,8 +123,6 @@ uapi_boot_entry_applies(const uapi_boot_entry_t *entry, const char *machine_id, 
 		return false;
 	if (entry->architecture && architecture && strcmp(entry->architecture, architecture))
 		return false;
-	/* We don't check the efi key because it can only express "entry is EFI only"; it cannot express
-	 * "this is a legacy BIOS entry" */
 	return true;
 }
 
@@ -147,7 +145,7 @@ uapi_boot_entry_more_recent(const uapi_boot_entry_t *entry_a, const uapi_boot_en
 
 /*
  * We pass in a best_ret pointer in case we need to extend this
- * to search more than on directory
+ * to search more than one directory
  */
 uapi_boot_entry_t *
 uapi_find_matching_boot_entry(const char *dir_path,

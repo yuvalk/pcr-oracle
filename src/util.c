@@ -526,7 +526,7 @@ read_single_line_file(const char *path, char *buffer, size_t size)
 	}
 
 	if (fgets(buffer, size, fp) != NULL)
-		buffer[strcspn(buffer, "\n")] = 0;
+		buffer[strcspn(buffer, "\n")] = '\0';
 	else
 		buffer[0] = '\0';
 
