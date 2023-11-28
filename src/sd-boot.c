@@ -171,6 +171,13 @@ sdb_identify_next_kernel(const char *id)
 	if (id == NULL || !strcasecmp(id, "auto")) {
 		match = get_valid_kernel_entry_tokens();
 	} else {
+		/* Try to load the entry referenced _exactly_ by the
+		 * given id. */
+		result = uapi_get_boot_entry(id);
+		if (result != NULL)
+			goto done;
+
+		/* No cigar, revert to a prefix based search */
 		uapi_kernel_entry_tokens_add(&id_match, id);
 		match = &id_match;
 	}
@@ -180,6 +187,7 @@ sdb_identify_next_kernel(const char *id)
 	if (machine_id != NULL)
 		result = uapi_find_boot_entry(match, machine_id);
 
+done:
 	uapi_kernel_entry_tokens_destroy(&id_match);
 	return result;
 }

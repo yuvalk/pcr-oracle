@@ -24,6 +24,7 @@
 #include <sys/param.h>
 #include <sys/utsname.h>
 #include <limits.h>
+#include <unistd.h>
 #include <assert.h>
 #include <ctype.h>
 #include <errno.h>
@@ -196,6 +197,29 @@ uapi_find_matching_boot_entry(const char *dir_path,
 	return best;
 }
 
+/*
+ * Get the exact boot entry identified by id.
+ * This is mainly for iterating over entries like
+ *   for name in "/boot/efi/loader/entries/"*.conf; do
+ *	pcr-oracle --boot-entry $(basename $name .conf) ...
+ *   done
+ */
+uapi_boot_entry_t *
+uapi_get_boot_entry(const char *id)
+{
+	char path[PATH_MAX];
+
+	if (path_has_file_extension(id, ".conf"))
+		snprintf(path, sizeof(path), "%s/%s", UAPI_BOOT_DIRECTORY, id);
+	else
+		snprintf(path, sizeof(path), "%s/%s.conf", UAPI_BOOT_DIRECTORY, id);
+
+	if (access(path, R_OK) < 0)
+		return NULL;
+
+	return uapi_boot_entry_load(path);
+}
+
 uapi_boot_entry_t *
 uapi_find_boot_entry(const uapi_kernel_entry_tokens_t *match, const char *machine_id)
 {
@@ -253,8 +277,13 @@ uapi_kernel_entry_tokens_match_filename(const uapi_kernel_entry_tokens_t *token_
 	for (i = 0; i < token_list->count; ++i) {
 		const char *token = token_list->entry_token[i];
 		int len = strlen(token);
+		char cc;
 
-		if (!strncmp(filename, token, len) && filename[len] == '-')
+		if (strncmp(filename, token, len))
+			continue;
+
+		cc = filename[len];
+		if (cc == '\0' || cc == '-' || cc == '.')
 			return true;
 	}
 
