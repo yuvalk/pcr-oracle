@@ -127,51 +127,6 @@ get_valid_kernel_entry_tokens(void)
 	return &valid_tokens;
 }
 
-static bool
-exists_efi_dir(const char *path)
-{
-	DIR *d = NULL;
-	char full_path[PATH_MAX];
-
-	if (path == NULL)
-		return false;
-
-	snprintf(full_path, PATH_MAX, "/boot/efi/%s", path);
-	if (!(d = opendir(full_path)))
-		return false;
-
-	closedir(d);
-	return true;
-}
-
-static const char *
-get_token_id(void)
-{
-	static const char *token_id = NULL;
-	const char *id = NULL;
-	const char *image_id = NULL;
-	const char *machine_id = NULL;
-
-	/* All IDs are optional (cannot be present), except machine_id */
-	token_id = read_entry_token();
-	id = read_os_release("ID");
-	image_id = read_os_release("IMAGE_ID");
-	if (!(machine_id = read_machine_id()))
-		return NULL;
-
-	/* The order is not correct, and it is using some heuristics
-	 * to find the correct prefix.  Other tools like sdbootutil
-	 * seems to use parameters to decide */
-	if (token_id == NULL && exists_efi_dir(id))
-		token_id = id;
-	if (token_id == NULL && exists_efi_dir(image_id))
-		token_id = id;
-	if (token_id == NULL && exists_efi_dir(machine_id))
-		token_id = machine_id;
-
-	return token_id;
-}
-
 /*
  * This should probably use UAPI boot entry logic as well
  */
