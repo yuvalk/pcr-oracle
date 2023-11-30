@@ -536,7 +536,7 @@ sdb_policy_file_add_entry(const char *filename, const char *policy_name, const c
 		goto out;
 
 	sdb_policy_entry_set_pcr_mask(entry, pcr_mask);
-	json_object_object_add(entry, "pfkp",
+	json_object_object_add(entry, "pkfp",
 			json_object_new_string(print_hex_string(fingerprint, fingerprint_len)));
 	json_object_object_add(entry, "sig",
 			json_object_new_string(print_base64_value(signature, signature_len)));
