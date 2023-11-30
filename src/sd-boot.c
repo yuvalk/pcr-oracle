@@ -454,7 +454,7 @@ sdb_policy_entry_set_pcr_mask(struct json_object *entry, unsigned int pcr_mask)
 	pcrs = json_object_new_array();
 	json_object_object_add(entry, "pcrs", pcrs);
 
-	for (pcr_index = 1; pcr_mask; pcr_index++, pcr_mask >>= 1) {
+	for (pcr_index = 0; pcr_mask; pcr_index++, pcr_mask >>= 1) {
 		if (pcr_mask & 1)
 			json_object_array_add(pcrs, json_object_new_int(pcr_index));
 	}
