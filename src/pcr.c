@@ -203,10 +203,16 @@ void
 pcr_bank_init_from_snapshot(tpm_pcr_bank_t *bank, const char *efivar_path)
 {
 	FILE *fp;
+	char buf[4];
 
 	debug("Trying to find PCR values in %s\n", efivar_path);
 	if (!(fp = fopen(efivar_path, "r")))
 		fatal("Unable to open \"%s\": %m\n", efivar_path);
+
+	/* The efivarfs files are not seekable. Use fread() to skip over
+	 * 4 bytes of variable attributes
+	 */
+	fread(buf, 4, 1, fp);
 
 	pcr_bank_init_from_snapshot_fp(fp, bank);
 }
