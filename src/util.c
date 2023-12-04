@@ -514,3 +514,22 @@ path_has_file_extension(const char *path, const char *suffix)
 
 	return !strcasecmp(path + n, suffix);
 }
+
+const char *
+read_single_line_file(const char *path, char *buffer, size_t size)
+{
+	FILE *fp;
+
+	if (!(fp = fopen(path, "r"))) {
+		debug("Cannot open %s: %m\n", path);
+		return NULL;
+	}
+
+	if (fgets(buffer, size, fp) != NULL)
+		buffer[strcspn(buffer, "\n")] = '\0';
+	else
+		buffer[0] = '\0';
+
+	fclose(fp);
+	return buffer;
+}

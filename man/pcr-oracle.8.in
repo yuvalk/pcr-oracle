@@ -82,7 +82,7 @@ object in a native format defined in the TPM specification.
 Finally, the systemd-boot implementation for unlocking disk partitions
 stores policies in a JSON formatted file, which can be fed to the
 \fBsystemd-cryptenroll\fP tool. This file will contain any number of
-signed policies that we want \fBsystemd-cryptsetup\fB to recognize during
+signed policies that we want \fBsystemd-cryptsetup\fP to recognize during
 boot time. Each entry contains the list of PCRs that compose the PCR policy, a
 finger print of the public key, the hash of the policy and the signature (in
 base64) of the PCR policy.
@@ -366,7 +366,7 @@ that. The main difference is in the way the signed policy is stored:
 	--from eventlog \\
 	--output tpm2-pcr-signature.json \\
 	--policy-format systemd \\
-	sign 0,2,4,7,9,11
+	sign 0,2,4,7,9,12
 .fi
 .P
 This will predict a set of PCR values, sign them using the specified
@@ -384,9 +384,8 @@ These policies can then be enrolled for future system boots using
 # systemd-cryptenroll \\
 	--tpm2-device=auto \\
 	--tpm2-public-key=public-key.pem \\
-	--tpm2-public-key-pcrs="0,2,4,7,9,11" \
+	--tpm2-public-key-pcrs="0,2,4,7,9,12" \
 	--tpm2-signature=tpm2-pcr-signature.json \\
-	--policy-format systemd \\
 	/dev/sda3
 .fi
 .\" ##################################################################
@@ -495,10 +494,22 @@ events (tracked in PCR9). In this case, it would be totally sufficient
 to stop processing after grub loaded \fPgrub.cfg\fP from the EFI
 System Partition.
 .TP
+.BI --boot-entry " id
+In a systemd-boot environment, the values of PCR registers also depend on
+the contents of the kernel and initrd image, as well as the kernel command line
+options. After a kernel update or an initrd rebuild, these values will change.
+So when predicting PCR values in this case, \fBpcr-oracle\fP needs to be
+instructed to refer to the future kernel rather than the current one.
+.IP
+This is what the \fB--boot-entry\fP option is for. It takes one argument, which
+is either an ID (in the sense of systemd-boot IDs), or \fBauto\fP. When
+the latter is given, \fBpcr-oracle\fP will make a best guess as to what
+kernel image will be used on next boot.
+.TP
 .BI --authorized-policy " path
 Specify the location of the authorized policy. In conjunction with
 the \fBcreate-authorized-policy\fP action, the newly created policy
-is written to this location. For subsequent actions, such as \fBseal\fB,
+is written to this location. For subsequent actions, such as \fBseal\fP,
 the policy will be read from this location.
 .TP
 .BI --private-key " path

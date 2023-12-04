@@ -141,7 +141,7 @@ __tpm_event_efi_variable_detect_hash_strategy(const tpm_event_t *ev, const tpm_p
 {
 	const tpm_evdigest_t *md, *old_md;
 
-	old_md = tpm_event_get_digest(ev, algo->openssl_name);
+	old_md = tpm_event_get_digest(ev, algo);
 	if (old_md == NULL) {
 		debug("Event does not provide a digest for algorithm %s\n", algo->openssl_name);
 		return -1;
@@ -199,7 +199,7 @@ __tpm_event_efi_variable_rehash(const tpm_event_t *ev, const tpm_parsed_event_t 
 			 * For the time being, just pretend these cannot be changed from
 			 * within the running system.
 			 */
-			md = tpm_event_get_digest(ev, algo->openssl_name);
+			md = tpm_event_get_digest(ev, algo);
 			goto out;
 		}
 	} else {
@@ -214,7 +214,7 @@ __tpm_event_efi_variable_rehash(const tpm_event_t *ev, const tpm_parsed_event_t 
 			/* The content of the variable doesn't exist during the measurement
 			 * and is also not available at runtime. Let's skip this event.
 			 */
-			md = tpm_event_get_digest(ev, algo->openssl_name);
+			md = tpm_event_get_digest(ev, algo);
 		}
 		goto out;
 	}

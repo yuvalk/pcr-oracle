@@ -32,7 +32,7 @@
 #include "runtime.h"
 #include "digest.h"
 #include "util.h"
-#include "sd-boot.h"
+#include "uapi.h"
 
 #define TPM_EVENT_LOG_MAX_ALGOS		64
 
@@ -406,13 +406,9 @@ tpm_event_type_to_string(unsigned int event_type)
 }
 
 const tpm_evdigest_t *
-tpm_event_get_digest(const tpm_event_t *ev, const char *algo_name)
+tpm_event_get_digest(const tpm_event_t *ev, const tpm_algo_info_t *algo_info)
 {
-	const tpm_algo_info_t *algo_info;
 	unsigned int i;
-
-	if ((algo_info = digest_by_name(algo_name)) < 0)
-		fatal("Unknown algo name \"%s\"\n", algo_name);
 
 	for (i = 0; i < ev->pcr_count; ++i) {
 		const tpm_evdigest_t *md = &ev->pcr_values[i];
@@ -793,21 +789,24 @@ __tpm_event_systemd_describe(const tpm_parsed_event_t *parsed)
 static const tpm_evdigest_t *
 __tpm_event_systemd_rehash(const tpm_event_t *ev, const tpm_parsed_event_t *parsed, tpm_event_log_rehash_ctx_t *ctx)
 {
-	sdb_entry_list_t entry_list;
+	const uapi_boot_entry_t *boot_entry = ctx->boot_entry;
 	char initrd[2048];
 	char initrd_utf16[4096];
 	unsigned int len;
 
-	memset(&entry_list, 0, sizeof(entry_list));
-	if (!sdb_get_entry_list(&entry_list)) {
-		error("Error generating the list of boot entries\n");
+	/* If no --next-kernel option was given, do not rehash anything */
+	if (boot_entry == NULL)
+		return tpm_event_get_digest(ev, ctx->algo);
+
+	if (!boot_entry->image_path) {
+		error("Unable to identify the next kernel\n");
 		return NULL;
 	}
 
-	debug("Next boot entry expected from: %s\n", entry_list.entries[0].path);
+	debug("Next boot entry expected from: %s %s\n", boot_entry->title, boot_entry->version? : "");
 	snprintf(initrd, sizeof(initrd), "initrd=%s %s",
-			path_unix2dos(entry_list.entries[0].path),
-			entry_list.entries[0].options);
+			path_unix2dos(boot_entry->initrd_path),
+			boot_entry->options? : "");
 
 	len = (strlen(initrd) + 1) << 1;
 	assert(len <= sizeof(initrd_utf16));
@@ -864,19 +863,20 @@ __tpm_event_tag_initrd_describe(const tpm_parsed_event_t *parsed)
 static const tpm_evdigest_t *
 __tpm_event_tag_initrd_rehash(const tpm_event_t *ev, const tpm_parsed_event_t *parsed, tpm_event_log_rehash_ctx_t *ctx)
 {
-	sdb_entry_list_t entry_list;
-	const tpm_evdigest_t *md = NULL;
+	const uapi_boot_entry_t *boot_entry = ctx->boot_entry;
 
-	memset(&entry_list, 0, sizeof(entry_list));
-	if (!sdb_get_entry_list(&entry_list)) {
-		error("Error generating the list of boot entries\n");
+	/* If no --next-kernel option was given, do not rehash anything */
+	if (boot_entry == NULL)
+		return tpm_event_get_digest(ev, ctx->algo);
+
+	if (!boot_entry->initrd_path) {
+		/* Can this happen eg when going from a split kernel to a unified kernel? */
+		error("Unable to identify the next initrd\n");
 		return NULL;
 	}
 
-	debug("Next boot entry expected from: %s\n", entry_list.entries[0].path);
-	md = runtime_digest_efi_file(ctx->algo, entry_list.entries[0].initrd);
-
-	return md;
+	debug("Next boot entry expected from: %s %s\n", boot_entry->title, boot_entry->version? : "");
+	return runtime_digest_efi_file(ctx->algo, boot_entry->initrd_path);
 }
 
 /*
