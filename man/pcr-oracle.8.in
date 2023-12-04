@@ -365,7 +365,6 @@ that. The main difference is in the way the signed policy is stored:
 	--private-key policy-key.pem \\
 	--from eventlog \\
 	--output tpm2-pcr-signature.json \\
-	--policy-format systemd \\
 	sign 0,2,4,7,9,12
 .fi
 .P

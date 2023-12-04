@@ -233,7 +233,7 @@ sdb_policy_entry_set_pcr_mask(struct json_object *entry, unsigned int pcr_mask)
 	pcrs = json_object_new_array();
 	json_object_object_add(entry, "pcrs", pcrs);
 
-	for (pcr_index = 1; pcr_mask; pcr_index++, pcr_mask >>= 1) {
+	for (pcr_index = 0; pcr_mask; pcr_index++, pcr_mask >>= 1) {
 		if (pcr_mask & 1)
 			json_object_array_add(pcrs, json_object_new_int(pcr_index));
 	}
@@ -315,7 +315,7 @@ sdb_policy_file_add_entry(const char *filename, const char *policy_name, const c
 		goto out;
 
 	sdb_policy_entry_set_pcr_mask(entry, pcr_mask);
-	json_object_object_add(entry, "pfkp",
+	json_object_object_add(entry, "pkfp",
 			json_object_new_string(print_hex_string(fingerprint, fingerprint_len)));
 	json_object_object_add(entry, "sig",
 			json_object_new_string(print_base64_value(signature, signature_len)));
