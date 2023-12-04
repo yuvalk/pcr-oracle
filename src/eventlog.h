@@ -200,6 +200,9 @@ typedef struct tpm_event_log_rehash_ctx {
 	bool			use_pesign;		/* compute authenticode FP using external pesign application */
 
 	const pecoff_image_info_t *next_stage_img;
+
+	/* This get set when the user specifies --next-kernel */
+	uapi_boot_entry_t *	boot_entry;
 } tpm_event_log_rehash_ctx_t;
 
 #define GRUB_COMMAND_ARGV_MAX	32
@@ -291,7 +294,7 @@ extern void			tpm_event_log_scan_ctx_init(tpm_event_log_scan_ctx_t *);
 extern void			tpm_event_log_scan_ctx_destroy(tpm_event_log_scan_ctx_t *);
 extern tpm_parsed_event_t *	tpm_event_parse(tpm_event_t *ev, tpm_event_log_scan_ctx_t *);
 extern const char *		tpm_event_type_to_string(unsigned int event_type);
-extern const tpm_evdigest_t *	tpm_event_get_digest(const tpm_event_t *ev, const char *algo_name);
+extern const tpm_evdigest_t *	tpm_event_get_digest(const tpm_event_t *ev, const tpm_algo_info_t *algo_info);
 extern void			tpm_parsed_event_print(tpm_parsed_event_t *parsed,
 					tpm_event_bit_printer *);
 extern const char *		tpm_parsed_event_describe(tpm_parsed_event_t *parsed);

@@ -65,9 +65,6 @@ extern bool		pcr_policy_sign(const target_platform_t *platform, const tpm_pcr_ba
 				const stored_key_t *private_key_file,
 				const char *input_path,
 				const char *output_path, const char *policy_name);
-extern bool		pcr_policy_sign_systemd(const tpm_pcr_bank_t *bank,
-				const stored_key_t *private_key_file,
-				const char *output_path);
 extern bool		pcr_authorized_policy_seal_secret(const target_platform_t *platform,
 				const char *authorized_policy, const char *input_path,
 				const char *output_path);

@@ -35,6 +35,7 @@ typedef struct pecoff_image_info pecoff_image_info_t;
 typedef struct testcase		testcase_t;
 typedef struct stored_key	stored_key_t;
 typedef struct target_platform	target_platform_t;
+typedef struct uapi_boot_entry	uapi_boot_entry_t;
 
 #endif /* TYPES_H */
 
